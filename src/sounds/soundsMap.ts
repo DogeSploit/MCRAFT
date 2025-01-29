@@ -2,6 +2,9 @@ import fs from 'fs'
 import path from 'path'
 import { versionsMapToMajor, versionToMajor, versionToNumber } from 'prismarine-viewer/viewer/prepare/utils'
 
+import { stopAllSounds } from '../basicSounds'
+import { musicSystem } from './musicSystem'
+
 interface SoundMeta {
   format: string
   baseUrl: string
@@ -147,6 +150,11 @@ export class SoundMap {
 
   getBreakSound (blockName: string): string {
     return this.getBlockSound(blockName, 'break', 'block.stone.break')
+  }
+
+  quit () {
+    musicSystem.stopMusic()
+    stopAllSounds()
   }
 }
 

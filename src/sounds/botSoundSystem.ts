@@ -1,13 +1,14 @@
-import { subscribeKey } from 'valtio/utils'
 import { Vec3 } from 'vec3'
 import { versionToNumber } from 'prismarine-viewer/viewer/prepare/utils'
 import { loadScript } from 'prismarine-viewer/viewer/lib/utils'
 import type { Block } from 'prismarine-block'
-import { miscUiState } from './globalState'
-import { options } from './optionsStorage'
-import { loadOrPlaySound } from './basicSounds'
+import { subscribeKey } from 'valtio/utils'
+import { miscUiState } from '../globalState'
+import { options } from '../optionsStorage'
+import { loadOrPlaySound } from '../basicSounds'
+import { getActiveResourcepackBasePath, resourcePackState } from '../resourcePack'
 import { createSoundMap, SoundMap } from './soundsMap'
-import { getActiveResourcepackBasePath, resourcePackState } from './resourcePack'
+import { musicSystem } from './musicSystem'
 
 let soundMap: SoundMap | undefined
 
@@ -16,8 +17,12 @@ const updateResourcePack = async () => {
   soundMap.activeResourcePackBasePath = await getActiveResourcepackBasePath() ?? undefined
 }
 
+let musicInterval: ReturnType<typeof setInterval> | null = null
+
 subscribeKey(miscUiState, 'gameLoaded', async () => {
   if (!miscUiState.gameLoaded || !loadedData.sounds) {
+    stopMusicSystem()
+    soundMap?.quit()
     return
   }
 
@@ -25,6 +30,7 @@ subscribeKey(miscUiState, 'gameLoaded', async () => {
   soundMap = createSoundMap(bot.version) ?? undefined
   if (!soundMap) return
   void updateResourcePack()
+  startMusicSystem()
 
   const playGeneralSound = async (soundKey: string, position?: Vec3, volume = 1, pitch?: number) => {
     if (!options.volume || !soundMap) return
@@ -54,6 +60,40 @@ subscribeKey(miscUiState, 'gameLoaded', async () => {
       if (lastPlayedSounds.lastClientPlayed.length > 10) {
         lastPlayedSounds.lastClientPlayed.shift()
       }
+    }
+  }
+
+  const musicStartCheck = async (force = false) => {
+    if (!soundMap) return
+    // 20% chance to start music
+    if (Math.random() > 0.2 && !force && !options.enableMusic) return
+
+    const musicKeys = ['music.game']
+    if (bot.game.gameMode === 'creative') {
+      musicKeys.push('music.creative')
+    }
+    const randomMusicKey = musicKeys[Math.floor(Math.random() * musicKeys.length)]
+    const soundData = await soundMap.getSoundUrl(randomMusicKey)
+    if (!soundData) return
+    await musicSystem.playMusic(soundData.url, soundData.volume)
+  }
+
+  function startMusicSystem () {
+    if (musicInterval) return
+    musicInterval = setInterval(() => {
+      void musicStartCheck()
+    }, 10_000)
+  }
+
+  window.forceStartMusic = () => {
+    void musicStartCheck(true)
+  }
+
+
+  function stopMusicSystem () {
+    if (musicInterval) {
+      clearInterval(musicInterval)
+      musicInterval = null
     }
   }
 

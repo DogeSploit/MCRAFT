@@ -1,4 +1,4 @@
-import { createSoundMap } from '../soundsMap'
+import { createSoundMap } from './soundsMap'
 
 //@ts-expect-error
 globalThis.window = {}
