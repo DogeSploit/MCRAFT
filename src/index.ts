@@ -98,6 +98,7 @@ import './mobileShim'
 import { parseFormattedMessagePacket } from './botUtils'
 import { getViewerVersionData, getWsProtocolStream } from './viewerConnector'
 import { updateCursor } from './cameraRotationControls'
+import { onGameLoad } from './inventoryWindows'
 
 window.debug = debug
 window.THREE = THREE
@@ -710,6 +711,8 @@ export async function connect (connectOptions: ConnectOptions) {
     botPosition()
 
     setLoadingScreenStatus('Setting callbacks')
+
+    onGameLoad(() => {})
 
     if (appStatusState.isError) return
     setTimeout(() => {
