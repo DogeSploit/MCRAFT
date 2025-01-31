@@ -54,17 +54,17 @@ function GameInteractionOverlayInner ({ zIndex }: { zIndex: number }) {
       if (capturedPointer) {
         return
       }
+      cameraControlEl.setPointerCapture(e.pointerId)
+      capturedPointer = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        sourceX: e.clientX,
+        sourceY: e.clientY,
+        activateCameraMove: false,
+        time: Date.now()
+      }
       if (options.touchInteractionType === 'classic') {
-        cameraControlEl.setPointerCapture(e.pointerId)
-        capturedPointer = {
-          id: e.pointerId,
-          x: e.clientX,
-          y: e.clientY,
-          sourceX: e.clientX,
-          sourceY: e.clientY,
-          activateCameraMove: false,
-          time: Date.now()
-        }
         virtualClickTimeout ??= setTimeout(() => {
           virtualClickActive = true
           document.dispatchEvent(new MouseEvent('mousedown', { button: 0 }))
