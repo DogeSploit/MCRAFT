@@ -40,6 +40,7 @@ export const moveCameraRawHandler = ({ x, y }: { x: number; y: number }) => {
   const minPitch = -0.5 * Math.PI
 
   viewer.world.lastCamUpdate = Date.now()
+  if (!bot?.entity) return
   const pitch = bot.entity.pitch - y
   void bot.look(bot.entity.yaw - x, Math.max(minPitch, Math.min(maxPitch, pitch)), true)
 }
