@@ -707,8 +707,9 @@ export class Entities extends EventEmitter {
       itemFrameMeta = getSpecificEntityMetadata('glow_item_frame', entity)
     }
     if (itemFrameMeta) {
-      // TODO: Figure out why this doesn't match the Item mineflayer type
-      const item = itemFrameMeta?.item as any as { itemId, blockId, components, nbtData: { value: { map: { value: number } } } }
+      // TODO: fix type
+      // todo! fix errors in mc-data (no entities data prior 1.18.2)
+      const item = (itemFrameMeta?.item ?? entity.metadata?.[8]) as any as { itemId, blockId, components, nbtData: { value: { map: { value: number } } } }
       mesh.scale.set(1, 1, 1)
       e.rotation.x = -entity.pitch
       e.children.find(c => {
