@@ -36,7 +36,7 @@ export const getVersionAutoSelect = (autoVersionSelect = options.serversAutoVers
   return autoVersionSelect
 }
 
-export const downloadMcData = async (version: string) => {
+export const downloadMcDataOnConnect = async (version: string) => {
   // setLoadingScreenStatus(`Loading data for ${version}`)
   // // todo expose cache
   // // const initialDataVersion = Object.keys(minecraftInitialDataJson)[0]!

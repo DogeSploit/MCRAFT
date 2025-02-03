@@ -37,7 +37,7 @@ export type AppQsParams = {
   command?: string
   // Misc params
   suggest_save?: string
-  scene?: string
+  noPacketsValidation?: string
 }
 
 export type AppQsParamsArray = {

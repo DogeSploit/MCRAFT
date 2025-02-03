@@ -5,8 +5,10 @@ import './globals'
 import './devtools'
 import './entities'
 import './globalDomListeners'
+import './mineflayer/mc-protocol'
 import './mineflayer/maps'
 import './mineflayer/cameraShake'
+import './shims/patchShims'
 import { onGameLoad } from './inventoryWindows'
 import initCollisionShapes from './getCollisionInteractionShapes'
 import protocolMicrosoftAuth from 'minecraft-protocol/src/client/microsoftAuth'
@@ -86,7 +88,7 @@ import { saveToBrowserMemory } from './react/PauseScreen'
 import { ViewerWrapper } from 'prismarine-viewer/viewer/lib/viewerWrapper'
 import './devReload'
 import './water'
-import { ConnectOptions, downloadMcData, getVersionAutoSelect, downloadOtherGameData } from './connect'
+import { ConnectOptions, downloadMcDataOnConnect, getVersionAutoSelect, downloadOtherGameData } from './connect'
 import { ref, subscribe } from 'valtio'
 import { signInMessageState } from './react/SignInMessageProvider'
 import { updateAuthenticatedAccountData, updateLoadedServerData } from './react/ServersListProvider'
@@ -374,7 +376,7 @@ export async function connect (connectOptions: ConnectOptions) {
         throw new Error('Microsoft authentication is only supported on 1.19.4 - 1.20.6 (at least for now)')
       }
 
-      await downloadMcData(version)
+      await downloadMcDataOnConnect(version)
       try {
         await resourcepackReload(version)
       } catch (err) {
