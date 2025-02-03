@@ -413,7 +413,7 @@ export default class HoldingBlock {
     const type = this.lastHeldItem?.type ?? 'hand'
     const { debug } = this
 
-    let scale = type === 'item' ? 0.68 : 0.45
+    let scale = type === 'item' ? 0.68 * 1.15 : 0.45 * 1.15
 
     const position = {
       x: debug.x ?? 0.4,
@@ -430,7 +430,7 @@ export default class HoldingBlock {
     if (type === 'hand') {
       // position.x = viewer.camera.aspect > 1 ? 0.7 : 1.1
       position.y = -0.8
-      scale = 0.8
+      scale = 0.8 * 1.15
     }
 
     const rotations = {

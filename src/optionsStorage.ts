@@ -51,7 +51,7 @@ const defaultOptions = {
   enabledResourcepack: null as string | null,
   useVersionsTextures: 'latest',
   serverResourcePacks: 'prompt' as 'prompt' | 'always' | 'never',
-  handDisplay: false,
+  handDisplay: true,
   packetsLoggerPreset: 'all' as 'all' | 'no-buffers',
 
   // antiAliasing: false,
