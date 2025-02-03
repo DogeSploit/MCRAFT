@@ -1,4 +1,4 @@
-const qsParams = new URLSearchParams(window.location.search)
+const qsParams = new URLSearchParams(window.location?.search ?? '')
 
 export type AppQsParams = {
   // AddServerOrConnect.tsx params
