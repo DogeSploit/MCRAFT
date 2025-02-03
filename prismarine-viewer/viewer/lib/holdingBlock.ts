@@ -96,6 +96,7 @@ export default class HoldingBlock {
   isSwinging = false
   nextIterStopCallbacks: Array<() => void> | undefined
   rightSide = true
+  handWalkingIdleAnimator: HandWalkingIdleAnimator | undefined
 
   debug = {} as Record<string, any>
 
@@ -404,6 +405,8 @@ export default class HoldingBlock {
     if (animatingCurrent) {
       await this.playBlockSwapAnimation()
     }
+    this.handWalkingIdleAnimator = new HandWalkingIdleAnimator(this.holdingBlock!)
+    this.handWalkingIdleAnimator.startAnimation('idle')
   }
 
   getHandHeld3d () {
@@ -476,5 +479,138 @@ export default class HoldingBlock {
       position,
       scale
     }
+  }
+}
+
+class HandWalkingIdleAnimator {
+  currentTween: tweenJs.Tween<any> | null = null
+  currentState = 'idle'
+  defaultPosition: {
+    x: number
+    y: number
+    z: number
+    rotationX: number
+    rotationY: number
+    rotationZ: number
+  }
+
+  constructor (public handMesh: THREE.Object3D) {
+    this.handMesh = handMesh
+    this.currentTween = null
+    this.currentState = 'idle'
+
+    // Base position
+    // this.defaultPosition = {
+    //   x: -0.8,
+    //   y: 0.2,
+    //   z: 0,
+    //   rotationX: 0,
+    //   rotationY: -70 * (Math.PI / 180), // Converting to radians
+    //   rotationZ: 20 * (Math.PI / 180)
+    // }
+    this.defaultPosition = {
+      x: handMesh.position.x,
+      y: handMesh.position.y,
+      z: handMesh.position.z,
+      rotationX: handMesh.rotation.x,
+      rotationY: handMesh.rotation.y,
+      rotationZ: handMesh.rotation.z
+    }
+  }
+
+  startAnimation (state: 'idle' | 'walking' | 'sprinting' | 'sneaking') {
+    // Stop any existing animation
+    if (this.currentTween) {
+      this.currentTween.stop()
+    }
+
+    this.currentState = state
+
+    switch (state) {
+      case 'idle':
+        this.playIdleAnimation()
+        break
+      case 'walking':
+        this.playWalkingAnimation()
+        break
+      case 'sprinting':
+        this.playSprintingAnimation()
+        break
+      case 'sneaking':
+        this.playIdleAnimation() // Same as idle but slightly lower
+        break
+    }
+  }
+
+  playIdleAnimation () {
+    // Subtle floating motion
+    const position = {
+      y: this.defaultPosition.y,
+      rotationZ: this.defaultPosition.rotationZ
+    }
+
+    this.currentTween = new tweenJs.Tween(position)
+      .to({
+        y: this.defaultPosition.y + 0.05,
+        rotationZ: this.defaultPosition.rotationZ + 0.05
+      }, 3000)
+      .easing(tweenJs.Easing.Sinusoidal.InOut)
+      .yoyo(true)
+      .repeat(Infinity)
+      .onUpdate(() => {
+        this.handMesh.position.y = position.y
+        this.handMesh.rotation.z = position.rotationZ
+      })
+      .start()
+  }
+
+  playWalkingAnimation () {
+    // Swaying motion while walking
+    const position = {
+      x: this.defaultPosition.x,
+      y: this.defaultPosition.y,
+      rotationZ: this.defaultPosition.rotationZ
+    }
+
+    this.currentTween = new tweenJs.Tween(position)
+      .to({
+        x: this.defaultPosition.x + 0.1,
+        y: this.defaultPosition.y + 0.1,
+        rotationZ: this.defaultPosition.rotationZ + 0.15
+      }, 500) // Faster than idle
+      .easing(tweenJs.Easing.Sinusoidal.InOut)
+      .yoyo(true)
+      .repeat(Infinity)
+      .onUpdate(() => {
+        this.handMesh.position.x = position.x
+        this.handMesh.position.y = position.y
+        this.handMesh.rotation.z = position.rotationZ
+      })
+      .start()
+  }
+
+  playSprintingAnimation () {
+    // More pronounced swaying for sprinting
+    const position = {
+      x: this.defaultPosition.x,
+      y: this.defaultPosition.y,
+      rotationZ: this.defaultPosition.rotationZ
+    }
+
+    this.currentTween = new tweenJs.Tween(position)
+      .to({
+        x: this.defaultPosition.x + 0.15,
+        y: this.defaultPosition.y + 0.15,
+        rotationZ: this.defaultPosition.rotationZ + 0.25
+      }, 300) // Even faster than walking
+      .easing(tweenJs.Easing.Sinusoidal.InOut)
+      .yoyo(true)
+      .repeat(Infinity)
+      .onUpdate(() => {
+        this.handMesh.position.x = position.x
+        this.handMesh.position.y = position.y
+        this.handMesh.rotation.z = position.rotationZ
+      })
+      .start()
   }
 }
