@@ -113,11 +113,6 @@ body {
 }
 
 @font-face {
-  font-family: minecraft;
-  src: url(../assets/minecraftia.woff);
-}
-
-@font-face {
   font-family: mojangles;
   src: url(../assets/mojangles.ttf?inline);
 }
