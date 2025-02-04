@@ -14,11 +14,12 @@ import { useSnapshot } from 'valtio'
 import BlockData from '../../prismarine-viewer/viewer/lib/moreBlockDataGenerated.json'
 import preflatMap from '../preflatMap.json'
 import { contro } from '../controls'
-import { gameAdditionalState, miscUiState, loadedGameState } from '../globalState'
+import { gameAdditionalState, miscUiState } from '../globalState'
 import { options } from '../optionsStorage'
 import Minimap, { DisplayMode } from './Minimap'
 import { ChunkInfo, DrawerAdapter, MapUpdates, MinimapDrawer } from './MinimapDrawer'
 import { useIsModalActive } from './utilsApp'
+import { lastConnectOptions } from './AppStatusProvider'
 
 const findHeightMap = (obj: PCChunk): number[] | undefined => {
   function search (obj: any): any | undefined {
@@ -100,7 +101,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     if (localServer) {
       this.overwriteWarps(localServer.warps)
     } else {
-      const storageWarps = localStorage.getItem(`warps: ${loadedGameState.username} ${loadedGameState.serverIp ?? ''}`)
+      const storageWarps = localStorage.getItem(`warps: ${lastConnectOptions.value?.server ?? 'server'} ${lastConnectOptions.value?.username ?? 'username'}`)
       this.overwriteWarps(JSON.parse(storageWarps ?? '[]'))
     }
     this.isOldVersion = versionToNumber(bot.version) < versionToNumber('1.13')
@@ -151,9 +152,9 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
       // type suppressed until server is updated. It works fine
       void (localServer as any).setWarp(warp, remove)
     } else if (remove) {
-      localStorage.removeItem(`warps: ${loadedGameState.username} ${loadedGameState.serverIp}`)
+      localStorage.removeItem(`warps: ${bot.player.username} ${lastConnectOptions.value!.server}`)
     } else {
-      localStorage.setItem(`warps: ${loadedGameState.username} ${loadedGameState.serverIp}`, JSON.stringify(this.warps))
+      localStorage.setItem(`warps: ${bot.player.username} ${lastConnectOptions.value!.server}`, JSON.stringify(this.warps))
     }
     this.emit('updateWarps')
   }
