@@ -621,129 +621,82 @@ class HandIdleAnimator {
 }
 
 class HandAnimator {
-  handData: {
-    handType: string // HandType enum: Empty, Default, Cube, Cactus
-    animationType: string // AnimationType enum: Idle, Breaking, Eating
-    animationStage: number // Animation progress 0.0 to 1.0
-  }
-  ANIMATION_TIME: number
-  PI: number
-  animationTimer: number
-  lastTime: number
+  private readonly ANIMATION_TIME = 250 // Faster animation (was 350ms)
+  private readonly PI = Math.PI
+  private animationTimer = 0
+  private lastTime = 0
+  private isAnimating = false
+  private defaultRotation: THREE.Euler
+  private defaultPosition: THREE.Vector3
+
   constructor (public handMesh: THREE.Object3D) {
     this.handMesh = handMesh
-    this.handData = {
-      handType: 'Empty', // HandType enum: Empty, Default, Cube, Cactus
-      animationType: 'Idle', // AnimationType enum: Idle, Breaking, Eating
-      animationStage: 0 // Animation progress 0.0 to 1.0
-    }
-
-    // Constants from HandAnimationData.h
-    this.ANIMATION_TIME = 1 / 5 // 0.2 seconds
-    this.PI = 3.141_592_653_59
-
-    // Animation timer
-    this.animationTimer = 0
-    this.lastTime = 0
+    // Store initial transforms to return to them
+    this.defaultRotation = handMesh.rotation.clone()
+    this.defaultPosition = handMesh.position.clone()
   }
 
   update () {
+    if (!this.isAnimating) return
+
     const now = performance.now()
     const deltaTime = (now - this.lastTime) / 1000
     this.lastTime = now
 
-    // Update animation stage for breaking/swinging
-    if (this.handData.animationType === 'Breaking') {
-      this.animationTimer += deltaTime
+    // Update animation progress
+    this.animationTimer += deltaTime * 1000 // Convert to ms
 
-      // Calculate animation stage (0 to 1)
-      this.handData.animationStage = this.animationTimer / this.ANIMATION_TIME
+    // Calculate animation stage (0 to 1)
+    const stage = Math.min(this.animationTimer / this.ANIMATION_TIME, 1)
 
-      // Reset animation when complete
-      if (this.animationTimer >= this.ANIMATION_TIME) {
-        this.handData.animationType = 'Idle'
-        this.handData.animationStage = 0
-        this.animationTimer = 0
-      }
+    if (stage >= 1) {
+      // Animation complete, reset
+      this.isAnimating = false
+      this.animationTimer = 0
+      // Return to default position/rotation
+      this.handMesh.rotation.copy(this.defaultRotation)
+      this.handMesh.position.copy(this.defaultPosition)
+      return
     }
 
-    // Reset transforms
-    this.handMesh.position.set(0, 0, 0)
-    this.handMesh.rotation.set(0, 0, 0)
-    this.handMesh.scale.set(1, 1, 1)
+    // Apply swing animation
+    // First half of animation is swing forward, second half is return
+    const swingStage = stage < 0.5 ? stage * 2 : 2 - (stage * 2)
 
-    // Apply transforms based on hand type and animation
-    switch (this.handData.handType) {
-      case 'Empty':
-        // Base position for empty hand
-        this.handMesh.position.set(-0.6, 0, -0.3)
-        this.handMesh.rotation.y = THREE.MathUtils.degToRad(-80)
-        this.handMesh.rotation.x = THREE.MathUtils.degToRad(-30)
-        this.handMesh.rotation.z = THREE.MathUtils.degToRad(30)
-        this.handMesh.position.add(new THREE.Vector3(-0.1, 0.5, 0))
+    // Forward and down motion
+    this.handMesh.rotation.x = this.defaultRotation.x - (Math.PI / 3) * swingStage
 
-        // Breaking animation for empty hand
-        if (this.handData.animationType === 'Breaking') {
-          const rotationAngle = Math.min(90 * this.handData.animationStage, 60)
-          this.handMesh.rotation.z += THREE.MathUtils.degToRad(rotationAngle)
+    // Add stronger leftward motion (was Math.PI / 6, now Math.PI / 3)
+    this.handMesh.rotation.z = this.defaultRotation.z + (Math.PI / 3) * swingStage // Changed minus to plus to swing left
 
-          this.handMesh.position.x += Math.cos(this.handData.animationStage * this.PI) * 0.2
-          - this.handData.animationStage * 0.5
-          this.handMesh.position.y += Math.sin(this.handData.animationStage * this.PI) * 0.6
-          - 0.3
-          this.handMesh.position.z += Math.sin(this.handData.animationStage * this.PI) * 0.3
-        }
-        break
-
-      case 'Default':
-        if (this.handData.animationType === 'Breaking') {
-          this.handMesh.rotation.y = THREE.MathUtils.degToRad(-70)
-          this.handMesh.rotation.z = THREE.MathUtils.degToRad(20)
-
-          const STAGE_1 = 0.2
-          if (this.handData.animationStage < STAGE_1) {
-            this.handMesh.position.set(
-              -0.8 - this.handData.animationStage * 0.7,
-              0.2 + this.handData.animationStage * 0.4,
-              this.handData.animationStage * 0.2
-            )
-          } else {
-            this.handMesh.position.set(
-              -0.8 - this.handData.animationStage * 0.7,
-              0.2 + 0.3 * 0.4 - (this.handData.animationStage - STAGE_1) * 1.4,
-              this.handData.animationStage * 0.2
-            )
-          }
-
-          this.handMesh.rotation.z += THREE.MathUtils.degToRad(120 * this.handData.animationStage)
-          this.handMesh.scale.set(0.6, 0.6, 0.6)
-        }
-        break
-
-      case 'Cube':
-      case 'Cactus':
-        this.handMesh.position.z = -1
-        this.handMesh.rotation.y = THREE.MathUtils.degToRad(-40)
-        this.handMesh.position.add(new THREE.Vector3(0.3, -0.3, 0))
-
-        if (this.handData.animationType === 'Breaking') {
-          this.handMesh.position.x -= this.handData.animationStage * 0.2
-          this.handMesh.position.y += this.handData.animationStage * 0.3
-          this.handMesh.position.z += this.handData.animationStage * 0.2
-
-          this.handMesh.rotation.x -= THREE.MathUtils.degToRad(90 * this.handData.animationStage)
-          this.handMesh.rotation.z += THREE.MathUtils.degToRad(60 * this.handData.animationStage)
-
-          const scale = 1 - this.handData.animationStage * 0.4
-          this.handMesh.scale.set(scale, scale, scale)
-        }
-        break
-    }
+    // Add a small forward position offset during swing, with slight leftward bias
+    const posOffset = new THREE.Vector3(-0.1, -0.1, 0.2).multiplyScalar(swingStage) // Added x offset for leftward movement
+    this.handMesh.position.copy(this.defaultPosition).add(posOffset)
   }
 
-  startBreakingAnimation () {
-    this.handData.animationType = 'Breaking'
-    this.handData.animationStage = 0
+  startSwing () {
+    if (this.isAnimating) return
+
+    this.isAnimating = true
     this.animationTimer = 0
+    this.lastTime = performance.now()
+
+    // Store current transforms as default to return to
+    this.defaultRotation = this.handMesh.rotation.clone()
+    this.defaultPosition = this.handMesh.position.clone()
+  }
+
+  stopSwing () {
+    if (!this.isAnimating) return
+
+    this.isAnimating = false
+    this.animationTimer = 0
+    // Return to default position/rotation immediately
+    this.handMesh.rotation.copy(this.defaultRotation)
+    this.handMesh.position.copy(this.defaultPosition)
+  }
+
+  isCurrentlySwinging () {
+    return this.isAnimating
   }
 }
