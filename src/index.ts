@@ -162,14 +162,14 @@ if (isIphone) {
 const viewer: import('prismarine-viewer/viewer/lib/viewer').Viewer = new Viewer(renderer, undefined, playerState)
 window.viewer = viewer
 // todo unify
-viewer.entities.getItemUv = (item) => {
+viewer.entities.getItemUv = (item, specificProps) => {
   const idOrName = item.itemId ?? item.blockId
   try {
     const name = typeof idOrName === 'number' ? loadedData.items[idOrName]?.name : idOrName
     if (!name) throw new Error(`Item not found: ${idOrName}`)
 
     const itemSelector = playerState.getItemSelector({
-      'minecraft:display_context': 'firstperson',
+      ...specificProps
     })
     const model = getItemDefinition(viewer.world.itemsDefinitionsStore, {
       name,
@@ -178,7 +178,7 @@ viewer.entities.getItemUv = (item) => {
     })?.model ?? name
 
     const renderInfo = renderSlot({
-      name,
+      name: model,
       nbt: null,
       ...item
     })

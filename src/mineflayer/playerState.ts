@@ -156,6 +156,7 @@ export class PlayerStateManager implements IPlayerState {
   }
 
   startUsingItem () {
+    if (this.isUsingItem) return
     this.isUsingItem = true
     this.itemUsageTicks = 0
   }

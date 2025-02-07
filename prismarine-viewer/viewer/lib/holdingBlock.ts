@@ -34,7 +34,7 @@ export default class HoldingBlock {
   offHand = false
   idleAnimator: HandIdleAnimator | undefined
   ready = false
-  lastRender = 0
+  lastUpdate = 0
 
   swingAnimator: HandSwingAnimator | undefined
 
@@ -127,10 +127,9 @@ export default class HoldingBlock {
   render (originalCamera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, ambientLight: THREE.AmbientLight, directionalLight: THREE.DirectionalLight) {
     if (!this.lastHeldItem) return
     const now = performance.now()
-    if (this.lastRender && now - this.lastRender > 50) { // one tick
+    if (this.lastUpdate && now - this.lastUpdate > 50) { // one tick
       void this.replaceItemModel(this.lastHeldItem)
     }
-    this.lastRender = now
 
     // Only update idle animation if not swinging
     if (this.swingAnimator?.isCurrentlySwinging()) {
@@ -234,6 +233,7 @@ export default class HoldingBlock {
   }
 
   private async createItemModel (handItem: HandItemBlock): Promise<{ model: THREE.Object3D; type: 'hand' | 'block' | 'item' } | undefined> {
+    this.lastUpdate = performance.now()
     if (!handItem) return undefined
 
     let blockInner: THREE.Object3D
