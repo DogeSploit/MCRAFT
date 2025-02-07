@@ -434,7 +434,13 @@ class HandIdleAnimator {
 
   // Debug parameters
   private readonly debugParams = {
-    transitionDuration: 300, // ms
+    // Transition durations for different state changes
+    transitionDurations: {
+      default: 300,
+      toSprinting: 150, // Faster transition when starting to sprint
+      fromSprinting: 400, // Slower transition when stopping sprinting
+      betweenMoving: 200 // Quick transition between walking/sprinting
+    },
     walkingSpeed: 7,
     sprintingSpeed: 10,
     walkingAmplitude: { x: 1 / 30, y: 1 / 10, rotationZ: 0.25 },
@@ -491,7 +497,31 @@ class HandIdleAnimator {
     }
   }
 
-  private startStateTransition (fromState: typeof this.currentState, toState: typeof this.currentState) {
+  private getTransitionDuration (fromState: MovementState, toState: MovementState): number {
+    if (toState === 'SPRINTING') {
+      return this.debugParams.transitionDurations.toSprinting
+    }
+    if (fromState === 'SPRINTING') {
+      return this.debugParams.transitionDurations.fromSprinting
+    }
+    if ((fromState === 'WALKING') ||
+      (toState === 'WALKING')) {
+      return this.debugParams.transitionDurations.betweenMoving
+    }
+    return this.debugParams.transitionDurations.default
+  }
+
+  private getTransitionEasing (fromState: MovementState, toState: MovementState) {
+    if (toState === 'SPRINTING') {
+      return tweenJs.Easing.Quadratic.In // Quick acceleration
+    }
+    if (fromState === 'SPRINTING') {
+      return tweenJs.Easing.Quadratic.Out // Gradual deceleration
+    }
+    return tweenJs.Easing.Quadratic.InOut // Smooth transition for other cases
+  }
+
+  private startStateTransition (fromState: MovementState, toState: MovementState) {
     // Store current offsets as starting point
     this.transitionState.fromOffsets = {
       x: this.handMesh.position.x - this.defaultPosition.x,
@@ -511,8 +541,8 @@ class HandIdleAnimator {
 
     this.transitionState.progress = 0
     this.transitionTween = new tweenJs.Tween(this.transitionState, this.tween)
-      .to({ progress: 1 }, this.debugParams.transitionDuration)
-      .easing(tweenJs.Easing.Quadratic.InOut)
+      .to({ progress: 1 }, this.getTransitionDuration(fromState, toState))
+      .easing(this.getTransitionEasing(fromState, toState))
       .start()
       .onComplete(() => {
         this.currentState = toState
