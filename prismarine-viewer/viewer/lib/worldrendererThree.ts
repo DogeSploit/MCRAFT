@@ -41,7 +41,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     this.starField = new StarField(scene)
     this.holdingBlock = new HoldingBlock(playerState)
     this.holdingBlockLeft = new HoldingBlock(playerState)
-    this.holdingBlockLeft.offHand = false
+    this.holdingBlockLeft.offHand = true
 
     this.renderUpdateEmitter.on('itemsTextureDownloaded', () => {
       this.holdingBlock.ready = true

@@ -67,7 +67,7 @@ import { isCypress } from './standaloneUtils'
 import {
   removePanorama
 } from './panorama'
-import { getItemDefinition } from 'mc-assets/dist/itemsDefinitions'
+import { getItemDefinition } from 'mc-assets/dist/itemDefinitions'
 
 import { startLocalServer, unsupportedLocalServerFeatures } from './createLocalServer'
 import defaultServerOptions from './defaultLocalServerOptions'

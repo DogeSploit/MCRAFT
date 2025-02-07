@@ -3,7 +3,7 @@ import { Vec3 } from 'vec3'
 import { IPlayerState, ItemSpecificContextProperties, MovementState, PlayerStateEvents } from 'prismarine-viewer/viewer/lib/basePlayerState'
 import { HandItemBlock } from 'prismarine-viewer/viewer/lib/holdingBlock'
 import TypedEmitter from 'typed-emitter'
-import { ItemSelector } from 'mc-assets/dist/itemsDefinitions'
+import { ItemSelector } from 'mc-assets/dist/itemDefinitions'
 import { gameAdditionalState } from '../globalState'
 
 export class PlayerStateManager implements IPlayerState {
@@ -66,13 +66,11 @@ export class PlayerStateManager implements IPlayerState {
     const { velocity } = bot.player.entity
     const isOnGround = bot.entity.onGround
     const VELOCITY_THRESHOLD = 0.01
-    const SPRINTING_VELOCITY = 0.18
+    const SPRINTING_VELOCITY = 0.15
 
     this.lastVelocity = velocity
 
-    if (!isOnGround) return // Keep current state if in air
-
-    if (gameAdditionalState.isSneaking) {
+    if (this.isSneaking() || this.isFlying() || !isOnGround) {
       this.movementState = 'SNEAKING'
     } else if (Math.abs(velocity.x) > VELOCITY_THRESHOLD || Math.abs(velocity.z) > VELOCITY_THRESHOLD) {
       this.movementState = Math.abs(velocity.x) > SPRINTING_VELOCITY || Math.abs(velocity.z) > SPRINTING_VELOCITY
@@ -173,3 +171,4 @@ export class PlayerStateManager implements IPlayerState {
 }
 
 export const playerState = PlayerStateManager.getInstance()
+window.playerState = playerState

@@ -34,6 +34,7 @@ export default class HoldingBlock {
   offHand = false
   idleAnimator: HandIdleAnimator | undefined
   ready = false
+  lastRender = 0
 
   swingAnimator: HandSwingAnimator | undefined
 
@@ -51,7 +52,7 @@ export default class HoldingBlock {
     const item = this.playerState.getHeldItem(this.offHand)
     if (item) {
       void this.setNewItem(item)
-    } else {
+    } else if (!this.offHand) {
       void this.setNewItem({
         type: 'hand',
       })
@@ -125,7 +126,19 @@ export default class HoldingBlock {
 
   render (originalCamera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer, ambientLight: THREE.AmbientLight, directionalLight: THREE.DirectionalLight) {
     if (!this.lastHeldItem) return
-    this.swingAnimator?.update()
+    const now = performance.now()
+    if (this.lastRender && now - this.lastRender > 50) { // one tick
+      void this.replaceItemModel(this.lastHeldItem)
+    }
+    this.lastRender = now
+
+    // Only update idle animation if not swinging
+    if (this.swingAnimator?.isCurrentlySwinging()) {
+      this.swingAnimator?.update()
+    } else {
+      this.idleAnimator?.update()
+    }
+
     this.blockSwapAnimation?.tween.update()
 
     const scene = new THREE.Scene()
@@ -220,16 +233,18 @@ export default class HoldingBlock {
     this.objectOuterGroup.scale.set(scale, scale, scale)
   }
 
-  private createItemModel (handItem: HandItemBlock): THREE.Object3D | undefined {
+  private async createItemModel (handItem: HandItemBlock): Promise<{ model: THREE.Object3D; type: 'hand' | 'block' | 'item' } | undefined> {
     if (!handItem) return undefined
 
-    let blockInner
+    let blockInner: THREE.Object3D
     if (handItem.type === 'item' || handItem.type === 'block') {
       const { mesh: itemMesh, isBlock } = viewer.entities.getItemMesh({
         ...handItem.fullItem,
         itemId: handItem.id,
       }, {
         'minecraft:display_context': 'firstperson',
+        'minecraft:use_duration': this.playerState.getItemUsageTicks?.(),
+        'minecraft:using_item': !!this.playerState.getItemUsageTicks?.(),
       })!
       if (isBlock) {
         blockInner = itemMesh
@@ -240,37 +255,37 @@ export default class HoldingBlock {
         handItem.type = 'item'
       }
     } else {
-      blockInner = getMyHand()
+      blockInner = await getMyHand()
     }
     blockInner.name = 'holdingBlock'
-    return blockInner
+
+    const rotationDeg = this.getHandHeld3d().rotation
+    blockInner.rotation.x = THREE.MathUtils.degToRad(rotationDeg.x)
+    blockInner.rotation.y = THREE.MathUtils.degToRad(rotationDeg.y)
+    blockInner.rotation.z = THREE.MathUtils.degToRad(rotationDeg.z)
+
+    return { model: blockInner, type: handItem.type }
   }
 
-  replaceItemModel (handItem?: HandItemBlock): void {
+  async replaceItemModel (handItem?: HandItemBlock): Promise<void> {
     if (!handItem) {
       this.holdingBlock?.removeFromParent()
       this.holdingBlock = undefined
       this.swingAnimator?.stopSwing()
       this.swingAnimator = undefined
+      this.idleAnimator = undefined
       return
     }
 
-    const blockInner = this.createItemModel(handItem)
-    if (!blockInner) return
+    const result = await this.createItemModel(handItem)
+    if (!result) return
 
     // Update the model without changing the group structure
     this.holdingBlock?.removeFromParent()
-    this.holdingBlock = blockInner
-    this.holdingBlockInnerGroup.add(blockInner)
+    this.holdingBlock = result.model
+    this.holdingBlockInnerGroup.add(result.model)
 
-    const rotationDeg = this.getHandHeld3d().rotation
-    this.holdingBlock.rotation.x = THREE.MathUtils.degToRad(rotationDeg.x)
-    this.holdingBlock.rotation.y = THREE.MathUtils.degToRad(rotationDeg.y)
-    this.holdingBlock.rotation.z = THREE.MathUtils.degToRad(rotationDeg.z)
-    this.objectOuterGroup.rotation.y = THREE.MathUtils.degToRad(rotationDeg.yOuter)
 
-    this.swingAnimator = new HandSwingAnimator(this.holdingBlockInnerGroup)
-    this.swingAnimator.type = handItem?.type ?? 'hand'
   }
 
   async setNewItem (handItem?: HandItemBlock) {
@@ -288,23 +303,23 @@ export default class HoldingBlock {
       this.holdingBlock = undefined
       this.swingAnimator?.stopSwing()
       this.swingAnimator = undefined
+      this.idleAnimator = undefined
       this.blockSwapAnimation = undefined
       return
     }
 
-    const blockInner = this.createItemModel(handItem)
-    if (!blockInner) return
+    const result = await this.createItemModel(handItem)
+    if (!result) return
 
     const blockOuterGroup = new THREE.Group()
     this.holdingBlockInnerGroup.removeFromParent()
     this.holdingBlockInnerGroup = new THREE.Group()
-    this.holdingBlockInnerGroup.add(blockInner)
+    this.holdingBlockInnerGroup.add(result.model)
     blockOuterGroup.add(this.holdingBlockInnerGroup)
-    this.holdingBlock = blockInner
+    this.holdingBlock = result.model
     this.objectInnerGroup = new THREE.Group()
     this.objectInnerGroup.add(blockOuterGroup)
     this.objectInnerGroup.position.set(-0.5, -0.5, -0.5)
-    // todo cleanup
     if (animatingCurrent) {
       this.objectInnerGroup.position.y -= this.objectInnerGroup.scale.y * 1.5
     }
@@ -315,20 +330,15 @@ export default class HoldingBlock {
 
     this.cameraGroup.add(this.objectOuterGroup)
     const rotationDeg = this.getHandHeld3d().rotation
-    const setRotation = () => {
-      this.holdingBlock!.rotation.x = THREE.MathUtils.degToRad(rotationDeg.x)
-      this.holdingBlock!.rotation.y = THREE.MathUtils.degToRad(rotationDeg.y)
-      this.holdingBlock!.rotation.z = THREE.MathUtils.degToRad(rotationDeg.z)
-      this.objectOuterGroup.rotation.y = THREE.MathUtils.degToRad(rotationDeg.yOuter)
-    }
-    setRotation()
+    this.objectOuterGroup.rotation.y = THREE.MathUtils.degToRad(rotationDeg.yOuter)
 
     if (animatingCurrent) {
       await this.playBlockSwapAnimation()
     }
 
     this.swingAnimator = new HandSwingAnimator(this.holdingBlockInnerGroup)
-    this.swingAnimator.type = handItem?.type ?? 'hand'
+    this.swingAnimator.type = result.type
+    this.idleAnimator = new HandIdleAnimator(this.holdingBlockInnerGroup, this.playerState)
   }
 
   getHandHeld3d () {
@@ -431,8 +441,9 @@ class HandIdleAnimator {
       this.idleTween.stop()
     }
 
-    this.idleOffset.y = 0
-    this.idleOffset.rotationZ = 0
+    // Start from current position for smooth transition
+    this.idleOffset.y = this.handMesh.position.y - this.defaultPosition.y
+    this.idleOffset.rotationZ = this.handMesh.rotation.z - this.defaultPosition.rotationZ
 
     this.idleTween = new tweenJs.Tween(this.idleOffset, this.tween)
       .to({
@@ -447,9 +458,21 @@ class HandIdleAnimator {
 
   private stopIdleAnimation () {
     if (this.idleTween) {
+      // Smoothly transition back to default position
+      const currentY = this.idleOffset.y
+      const currentRotZ = this.idleOffset.rotationZ
+
       this.idleTween.stop()
-      this.idleOffset.y = 0
-      this.idleOffset.rotationZ = 0
+      this.idleTween = new tweenJs.Tween(this.idleOffset, this.tween)
+        .to({
+          y: 0,
+          rotationZ: 0
+        }, 300)
+        .easing(tweenJs.Easing.Quadratic.Out)
+        .start()
+        .onComplete(() => {
+          this.idleTween = null
+        })
     }
   }
 
@@ -515,17 +538,17 @@ class HandIdleAnimator {
       this.handMesh.rotation.z = this.defaultPosition.rotationZ
 
       // Apply vertex shader-style swinging
-      const swingX = Math.sin(this.globalTime) / 30
-      const swingY = -Math.abs(Math.cos(this.globalTime) / 10)
+      // const swingX = Math.sin(this.globalTime) / 30
+      // const swingY = -Math.abs(Math.cos(this.globalTime) / 10)
 
-      // Apply the swing
-      this.handMesh.position.x += swingX
-      this.handMesh.position.y += swingY
+      // // Apply the swing
+      // this.handMesh.position.x += swingX
+      // this.handMesh.position.y += swingY
 
-      // Add arm swinging rotation
-      // This creates the characteristic Minecraft arm swing
-      const swingAngle = Math.sin(this.globalTime) * (this.currentState === 'SPRINTING' ? 0.4 : 0.25)
-      this.handMesh.rotation.z += swingAngle
+      // // Add arm swinging rotation
+      // // This creates the characteristic Minecraft arm swing
+      // const swingAngle = Math.sin(this.globalTime) * (this.currentState === 'SPRINTING' ? 0.4 : 0.25)
+      // this.handMesh.rotation.z += swingAngle
     }
   }
 
@@ -562,8 +585,8 @@ class HandSwingAnimator {
     newPositionY: -0.1,
     newPositionZ: 0.2,
     // Item specific position
-    newPositionItemX: -0.1,
-    newPositionItemY: -0.3,
+    newPositionItemX: 0.1,
+    newPositionItemY: -1.02,
     newPositionItemZ: 0.648,
 
     // Shared parameters
