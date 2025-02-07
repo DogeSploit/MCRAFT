@@ -102,6 +102,7 @@ export default class HoldingBlock {
   debug = {} as Record<string, any>
 
   private readonly swingController = new AnimationController()
+  handAnimator: HandAnimator
 
   constructor (public playerState: IPlayerState) {
     this.initCameraGroup()
@@ -318,6 +319,7 @@ export default class HoldingBlock {
     if (!this.swingController.isActive && !this.blockSwapAnimation) {
       this.idleAnimator?.update()
     }
+    this.handAnimator?.update()
   }
 
   async initHandObject (material: THREE.Material, blockstatesModels: any, blocksAtlases: any, handItem?: HandItemBlock) {
@@ -410,7 +412,8 @@ export default class HoldingBlock {
     if (animatingCurrent) {
       await this.playBlockSwapAnimation()
     }
-    this.idleAnimator = new HandIdleAnimator(this.holdingBlockInnerGroup, this.playerState)
+    // this.idleAnimator = new HandIdleAnimator(this.holdingBlockInnerGroup, this.playerState)
+    this.handAnimator = new HandAnimator(this.holdingBlockInnerGroup)
   }
 
   getHandHeld3d () {
@@ -596,10 +599,151 @@ class HandIdleAnimator {
       this.handMesh.rotation.x = this.defaultPosition.rotationX
       this.handMesh.rotation.y = this.defaultPosition.rotationY
       this.handMesh.rotation.z = this.defaultPosition.rotationZ
+
+      // Apply vertex shader-style swinging
+      const swingX = Math.sin(this.globalTime) / 30
+      const swingY = -Math.abs(Math.cos(this.globalTime) / 10)
+
+      // Apply the swing
+      this.handMesh.position.x += swingX
+      this.handMesh.position.y += swingY
+
+      // Add arm swinging rotation
+      // This creates the characteristic Minecraft arm swing
+      const swingAngle = Math.sin(this.globalTime) * (this.currentState === 'SPRINTING' ? 0.4 : 0.25)
+      this.handMesh.rotation.z += swingAngle
     }
   }
 
   getCurrentState () {
     return this.currentState
+  }
+}
+
+class HandAnimator {
+  handData: {
+    handType: string // HandType enum: Empty, Default, Cube, Cactus
+    animationType: string // AnimationType enum: Idle, Breaking, Eating
+    animationStage: number // Animation progress 0.0 to 1.0
+  }
+  ANIMATION_TIME: number
+  PI: number
+  animationTimer: number
+  lastTime: number
+  constructor (public handMesh: THREE.Object3D) {
+    this.handMesh = handMesh
+    this.handData = {
+      handType: 'Empty', // HandType enum: Empty, Default, Cube, Cactus
+      animationType: 'Idle', // AnimationType enum: Idle, Breaking, Eating
+      animationStage: 0 // Animation progress 0.0 to 1.0
+    }
+
+    // Constants from HandAnimationData.h
+    this.ANIMATION_TIME = 1 / 5 // 0.2 seconds
+    this.PI = 3.141_592_653_59
+
+    // Animation timer
+    this.animationTimer = 0
+    this.lastTime = 0
+  }
+
+  update () {
+    const now = performance.now()
+    const deltaTime = (now - this.lastTime) / 1000
+    this.lastTime = now
+
+    // Update animation stage for breaking/swinging
+    if (this.handData.animationType === 'Breaking') {
+      this.animationTimer += deltaTime
+
+      // Calculate animation stage (0 to 1)
+      this.handData.animationStage = this.animationTimer / this.ANIMATION_TIME
+
+      // Reset animation when complete
+      if (this.animationTimer >= this.ANIMATION_TIME) {
+        this.handData.animationType = 'Idle'
+        this.handData.animationStage = 0
+        this.animationTimer = 0
+      }
+    }
+
+    // Reset transforms
+    this.handMesh.position.set(0, 0, 0)
+    this.handMesh.rotation.set(0, 0, 0)
+    this.handMesh.scale.set(1, 1, 1)
+
+    // Apply transforms based on hand type and animation
+    switch (this.handData.handType) {
+      case 'Empty':
+        // Base position for empty hand
+        this.handMesh.position.set(-0.6, 0, -0.3)
+        this.handMesh.rotation.y = THREE.MathUtils.degToRad(-80)
+        this.handMesh.rotation.x = THREE.MathUtils.degToRad(-30)
+        this.handMesh.rotation.z = THREE.MathUtils.degToRad(30)
+        this.handMesh.position.add(new THREE.Vector3(-0.1, 0.5, 0))
+
+        // Breaking animation for empty hand
+        if (this.handData.animationType === 'Breaking') {
+          const rotationAngle = Math.min(90 * this.handData.animationStage, 60)
+          this.handMesh.rotation.z += THREE.MathUtils.degToRad(rotationAngle)
+
+          this.handMesh.position.x += Math.cos(this.handData.animationStage * this.PI) * 0.2
+          - this.handData.animationStage * 0.5
+          this.handMesh.position.y += Math.sin(this.handData.animationStage * this.PI) * 0.6
+          - 0.3
+          this.handMesh.position.z += Math.sin(this.handData.animationStage * this.PI) * 0.3
+        }
+        break
+
+      case 'Default':
+        if (this.handData.animationType === 'Breaking') {
+          this.handMesh.rotation.y = THREE.MathUtils.degToRad(-70)
+          this.handMesh.rotation.z = THREE.MathUtils.degToRad(20)
+
+          const STAGE_1 = 0.2
+          if (this.handData.animationStage < STAGE_1) {
+            this.handMesh.position.set(
+              -0.8 - this.handData.animationStage * 0.7,
+              0.2 + this.handData.animationStage * 0.4,
+              this.handData.animationStage * 0.2
+            )
+          } else {
+            this.handMesh.position.set(
+              -0.8 - this.handData.animationStage * 0.7,
+              0.2 + 0.3 * 0.4 - (this.handData.animationStage - STAGE_1) * 1.4,
+              this.handData.animationStage * 0.2
+            )
+          }
+
+          this.handMesh.rotation.z += THREE.MathUtils.degToRad(120 * this.handData.animationStage)
+          this.handMesh.scale.set(0.6, 0.6, 0.6)
+        }
+        break
+
+      case 'Cube':
+      case 'Cactus':
+        this.handMesh.position.z = -1
+        this.handMesh.rotation.y = THREE.MathUtils.degToRad(-40)
+        this.handMesh.position.add(new THREE.Vector3(0.3, -0.3, 0))
+
+        if (this.handData.animationType === 'Breaking') {
+          this.handMesh.position.x -= this.handData.animationStage * 0.2
+          this.handMesh.position.y += this.handData.animationStage * 0.3
+          this.handMesh.position.z += this.handData.animationStage * 0.2
+
+          this.handMesh.rotation.x -= THREE.MathUtils.degToRad(90 * this.handData.animationStage)
+          this.handMesh.rotation.z += THREE.MathUtils.degToRad(60 * this.handData.animationStage)
+
+          const scale = 1 - this.handData.animationStage * 0.4
+          this.handMesh.scale.set(scale, scale, scale)
+        }
+        break
+    }
+  }
+
+  startBreakingAnimation () {
+    this.handData.animationType = 'Breaking'
+    this.handData.animationStage = 0
+    this.animationTimer = 0
   }
 }
