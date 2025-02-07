@@ -13,6 +13,8 @@ export class PlayerStateManager implements IPlayerState {
   // Movement and physics state
   private lastVelocity = new Vec3(0, 0, 0)
   private movementState: MovementState = 'NOT_MOVING'
+  private timeOffGround = 0
+  private lastUpdateTime = performance.now()
 
   // Held item state
   private heldItem?: HandItemBlock
@@ -67,10 +69,22 @@ export class PlayerStateManager implements IPlayerState {
     const isOnGround = bot.entity.onGround
     const VELOCITY_THRESHOLD = 0.01
     const SPRINTING_VELOCITY = 0.15
+    const OFF_GROUND_THRESHOLD = 300 // ms before switching to SNEAKING when off ground
+
+    const now = performance.now()
+    const deltaTime = now - this.lastUpdateTime
+    this.lastUpdateTime = now
 
     this.lastVelocity = velocity
 
-    if (this.isSneaking() || this.isFlying() || !isOnGround) {
+    // Update time off ground
+    if (isOnGround) {
+      this.timeOffGround = 0
+    } else {
+      this.timeOffGround += deltaTime
+    }
+
+    if (this.isSneaking() || this.isFlying() || (this.timeOffGround > OFF_GROUND_THRESHOLD)) {
       this.movementState = 'SNEAKING'
     } else if (Math.abs(velocity.x) > VELOCITY_THRESHOLD || Math.abs(velocity.z) > VELOCITY_THRESHOLD) {
       this.movementState = Math.abs(velocity.x) > SPRINTING_VELOCITY || Math.abs(velocity.z) > SPRINTING_VELOCITY

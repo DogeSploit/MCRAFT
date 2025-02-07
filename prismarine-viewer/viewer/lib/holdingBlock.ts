@@ -4,7 +4,7 @@ import worldBlockProvider from 'mc-assets/dist/worldBlockProvider'
 import { BlockModel } from 'mc-assets'
 import { getThreeBlockModelGroup, renderBlockThree, setBlockPosition } from './mesher/standaloneRenderer'
 import { getMyHand } from './hand'
-import { IPlayerState } from './basePlayerState'
+import { IPlayerState, MovementState } from './basePlayerState'
 import { DebugGui } from './DebugGui'
 
 export type HandItemBlock = {
@@ -416,15 +416,38 @@ export default class HoldingBlock {
 class HandIdleAnimator {
   globalTime = 0
   lastTime = 0
-  currentState: 'NOT_MOVING' | 'WALKING' | 'SPRINTING' | 'SNEAKING'
+  currentState: MovementState
+  targetState: MovementState
   defaultPosition: { x: number; y: number; z: number; rotationX: number; rotationY: number; rotationZ: number }
   private idleTween: tweenJs.Tween<{ y: number; rotationZ: number }> | null = null
   private readonly idleOffset = { y: 0, rotationZ: 0 }
   private readonly tween = new tweenJs.Group()
+  private transitionTween: tweenJs.Tween<{ progress: number }> | null = null
+  private readonly transitionState = {
+    progress: 0,
+    fromState: 'NOT_MOVING' as MovementState,
+    toState: 'NOT_MOVING' as MovementState,
+    fromTime: 0,
+    toTime: 0,
+    fromOffsets: { x: 0, y: 0, z: 0, rotationZ: 0 }
+  }
+
+  // Debug parameters
+  private readonly debugParams = {
+    transitionDuration: 300, // ms
+    walkingSpeed: 7,
+    sprintingSpeed: 10,
+    walkingAmplitude: { x: 1 / 30, y: 1 / 10, rotationZ: 0.25 },
+    sprintingAmplitude: { x: 1 / 30, y: 1 / 10, rotationZ: 0.4 }
+  }
+
+  private readonly debugGui: DebugGui
 
   constructor (public handMesh: THREE.Object3D, public playerState: IPlayerState) {
     this.handMesh = handMesh
     this.globalTime = 0
+    this.currentState = 'NOT_MOVING'
+    this.targetState = 'NOT_MOVING'
 
     this.defaultPosition = {
       x: handMesh.position.x,
@@ -434,6 +457,10 @@ class HandIdleAnimator {
       rotationY: handMesh.rotation.y,
       rotationZ: handMesh.rotation.z
     }
+
+    // Initialize debug GUI
+    this.debugGui = new DebugGui('idle_animator', this.debugParams)
+    this.debugGui.visible = false
   }
 
   private startIdleAnimation () {
@@ -458,31 +485,80 @@ class HandIdleAnimator {
 
   private stopIdleAnimation () {
     if (this.idleTween) {
-      // Smoothly transition back to default position
-      const currentY = this.idleOffset.y
-      const currentRotZ = this.idleOffset.rotationZ
-
       this.idleTween.stop()
-      this.idleTween = new tweenJs.Tween(this.idleOffset, this.tween)
-        .to({
-          y: 0,
-          rotationZ: 0
-        }, 300)
-        .easing(tweenJs.Easing.Quadratic.Out)
-        .start()
-        .onComplete(() => {
-          this.idleTween = null
-        })
+      this.idleOffset.y = 0
+      this.idleOffset.rotationZ = 0
     }
   }
 
-  setState (state: 'NOT_MOVING' | 'WALKING' | 'SPRINTING' | 'SNEAKING') {
-    this.currentState = state
+  private startStateTransition (fromState: typeof this.currentState, toState: typeof this.currentState) {
+    // Store current offsets as starting point
+    this.transitionState.fromOffsets = {
+      x: this.handMesh.position.x - this.defaultPosition.x,
+      y: this.handMesh.position.y - this.defaultPosition.y,
+      z: this.handMesh.position.z - this.defaultPosition.z,
+      rotationZ: this.handMesh.rotation.z - this.defaultPosition.rotationZ
+    }
 
-    if (state === 'NOT_MOVING' || state === 'SNEAKING') {
-      this.startIdleAnimation()
-    } else {
-      this.stopIdleAnimation()
+    this.transitionState.fromState = fromState
+    this.transitionState.toState = toState
+    this.transitionState.fromTime = this.globalTime
+    this.transitionState.toTime = this.globalTime
+
+    if (this.transitionTween) {
+      this.transitionTween.stop()
+    }
+
+    this.transitionState.progress = 0
+    this.transitionTween = new tweenJs.Tween(this.transitionState, this.tween)
+      .to({ progress: 1 }, this.debugParams.transitionDuration)
+      .easing(tweenJs.Easing.Quadratic.InOut)
+      .start()
+      .onComplete(() => {
+        this.currentState = toState
+        this.transitionTween = null
+
+        if (toState === 'NOT_MOVING' || toState === 'SNEAKING') {
+          this.startIdleAnimation()
+        }
+      })
+  }
+
+  setState (newState: MovementState) {
+    if (newState === this.targetState) return
+
+    this.targetState = newState
+    if (this.currentState !== newState) {
+      this.startStateTransition(this.currentState, newState)
+
+      if (this.currentState === 'NOT_MOVING' || this.currentState === 'SNEAKING') {
+        this.stopIdleAnimation()
+      }
+    }
+  }
+
+  private getStateOffsets (state: typeof this.currentState, time: number) {
+    switch (state) {
+      case 'NOT_MOVING':
+      case 'SNEAKING':
+        return {
+          x: 0,
+          y: this.idleOffset.y,
+          z: 0,
+          rotationZ: this.idleOffset.rotationZ
+        }
+      case 'WALKING':
+      case 'SPRINTING': {
+        const speed = state === 'SPRINTING' ? this.debugParams.sprintingSpeed : this.debugParams.walkingSpeed
+        const amplitude = state === 'SPRINTING' ? this.debugParams.sprintingAmplitude : this.debugParams.walkingAmplitude
+
+        return {
+          x: Math.sin(time * speed) * amplitude.x,
+          y: -Math.abs(Math.cos(time * speed)) * amplitude.y,
+          z: 0,
+          rotationZ: Math.sin(time * speed) * amplitude.rotationZ
+        }
+      }
     }
   }
 
@@ -491,65 +567,57 @@ class HandIdleAnimator {
     const deltaTime = (now - this.lastTime) / 1000
     this.lastTime = now
 
-    // Update tweens for idle animation
+    // Update global time based on current state
+    switch (this.currentState) {
+      case 'NOT_MOVING':
+      case 'SNEAKING':
+        this.globalTime = Math.PI / 4
+        break
+      case 'SPRINTING':
+      case 'WALKING':
+        this.globalTime += deltaTime
+        break
+    }
+
+    // Update tweens
     this.tween.update()
 
-    // Get current state from viewer's player state
+    // Check for state changes from player state
     if (this.playerState) {
       const newState = this.playerState.getMovementState()
-      if (newState !== this.currentState) {
+      if (newState !== this.targetState) {
         this.setState(newState)
       }
     }
 
-    // Update global time based on player state
-    switch (this.currentState) {
-      case 'NOT_MOVING':
-      case 'SNEAKING':
-        this.globalTime = Math.PI / 4 // Fixed value: 3.14f / 4
-        // Idle animation handled by Tween
-        break
-      case 'SPRINTING':
-        this.globalTime += deltaTime * 10 // time * 10
-        break
-      case 'WALKING':
-        this.globalTime += deltaTime * 7 // time * 7
-        break
-    }
+    // Calculate current position and rotation
+    if (this.transitionTween) {
+      // We're transitioning between states
+      const fromOffsets = this.getStateOffsets(this.transitionState.fromState, this.transitionState.fromTime)
+      const toOffsets = this.getStateOffsets(this.transitionState.toState, this.globalTime)
 
-    if (this.currentState === 'NOT_MOVING' || this.currentState === 'SNEAKING') {
-      // Use smooth idle animation
-      this.handMesh.position.x = this.defaultPosition.x
-      this.handMesh.position.y = this.defaultPosition.y + this.idleOffset.y
-      this.handMesh.position.z = this.defaultPosition.z
+      // Interpolate between states
+      const t = this.transitionState.progress
+      this.handMesh.position.x = this.defaultPosition.x + this.lerp(fromOffsets.x, toOffsets.x, t)
+      this.handMesh.position.y = this.defaultPosition.y + this.lerp(fromOffsets.y, toOffsets.y, t)
+      this.handMesh.position.z = this.defaultPosition.z + this.lerp(fromOffsets.z, toOffsets.z, t)
       this.handMesh.rotation.x = this.defaultPosition.rotationX
       this.handMesh.rotation.y = this.defaultPosition.rotationY
       this.handMesh.rotation.z = this.defaultPosition.rotationZ + this.idleOffset.rotationZ
     } else {
-      // Use Minecraft-style vertex shader animation for walking/sprinting
-      const offsetX = Math.sin(this.globalTime) / 30
-      const offsetY = -Math.abs(Math.cos(this.globalTime) / 10)
-
-      this.handMesh.position.x = this.defaultPosition.x + offsetX
-      this.handMesh.position.y = this.defaultPosition.y + offsetY
-      this.handMesh.position.z = this.defaultPosition.z
+      // We're in a stable state
+      const offsets = this.getStateOffsets(this.currentState, this.globalTime)
+      this.handMesh.position.x = this.defaultPosition.x + offsets.x
+      this.handMesh.position.y = this.defaultPosition.y + offsets.y
+      this.handMesh.position.z = this.defaultPosition.z + offsets.z
       this.handMesh.rotation.x = this.defaultPosition.rotationX
       this.handMesh.rotation.y = this.defaultPosition.rotationY
       this.handMesh.rotation.z = this.defaultPosition.rotationZ
-
-      // Apply vertex shader-style swinging
-      // const swingX = Math.sin(this.globalTime) / 30
-      // const swingY = -Math.abs(Math.cos(this.globalTime) / 10)
-
-      // // Apply the swing
-      // this.handMesh.position.x += swingX
-      // this.handMesh.position.y += swingY
-
-      // // Add arm swinging rotation
-      // // This creates the characteristic Minecraft arm swing
-      // const swingAngle = Math.sin(this.globalTime) * (this.currentState === 'SPRINTING' ? 0.4 : 0.25)
-      // this.handMesh.rotation.z += swingAngle
     }
+  }
+
+  private lerp (a: number, b: number, t: number): number {
+    return a + (b - a) * t
   }
 
   getCurrentState () {
@@ -614,6 +682,7 @@ class HandSwingAnimator {
         step: 0.01
       }
     })
+    this.debugGui.visible = false
   }
 
   update () {
