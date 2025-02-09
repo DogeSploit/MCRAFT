@@ -346,8 +346,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       mc-assets:
-        specifier: ^0.2.28
-        version: 0.2.28
+        specifier: ^0.2.31
+        version: 0.2.31
       minecraft-inventory-gui:
         specifier: github:zardoy/minecraft-inventory-gui#next
         version: https://codeload.github.com/zardoy/minecraft-inventory-gui/tar.gz/75e940a4cd50d89e0ba03db3733d5d704917a3c8(@types/react@18.2.20)(react@18.2.0)
@@ -369,12 +369,12 @@ importers:
       path-exists-cli:
         specifier: ^2.0.0
         version: 2.0.0
-      prismarine-viewer:
-        specifier: link:prismarine-viewer
-        version: link:prismarine-viewer
       process:
         specifier: github:PrismarineJS/node-process
         version: https://codeload.github.com/PrismarineJS/node-process/tar.gz/380d0b4f4c86f1b65b216c311bf00431f314e88e
+      renderer:
+        specifier: link:renderer
+        version: link:renderer
       rimraf:
         specifier: ^5.0.1
         version: 5.0.1
@@ -400,7 +400,7 @@ importers:
         specifier: ^2.3.2
         version: 2.4.1
 
-  prismarine-viewer:
+  renderer:
     dependencies:
       '@tweenjs/tween.js':
         specifier: ^20.0.3
@@ -435,12 +435,12 @@ importers:
       prismarine-schematic:
         specifier: ^1.2.0
         version: 1.2.3
-      prismarine-viewer:
-        specifier: link:./
-        version: 'link:'
       process:
         specifier: ^0.11.10
         version: 0.11.10
+      renderer:
+        specifier: link:./
+        version: 'link:'
       socket.io:
         specifier: ^4.0.0
         version: 4.7.2
@@ -471,7 +471,7 @@ importers:
         specifier: ^1.2.2
         version: 1.2.2
 
-  prismarine-viewer/viewer/sign-renderer:
+  renderer/viewer/sign-renderer:
     dependencies:
       vite:
         specifier: ^4.4.9
@@ -6256,8 +6256,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mc-assets@0.2.28:
-    resolution: {integrity: sha512-NwUpKFExg/xs5YguFMeGa7Zie2yoJh2EcUSV4n46q4OF60AmgoEj0OSOS2xnZF2BL17JJ3Y97V6quAR9NCKLeQ==}
+  mc-assets@0.2.31:
+    resolution: {integrity: sha512-+WAU9+iRbBgWWgsrQ52j0Xqq+Qs7UbjlVtZq1NCTqpIAvaEKNCwM7u2qFV5hoj4RpBAsVmkgLissdjLddE8WaA==}
     engines: {node: '>=18.0.0'}
 
   md5-file@4.0.0:
@@ -16642,7 +16642,7 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mc-assets@0.2.28: {}
+  mc-assets@0.2.31: {}
 
   md5-file@4.0.0: {}
 

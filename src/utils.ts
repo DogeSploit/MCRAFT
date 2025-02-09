@@ -1,6 +1,5 @@
-import { activeModalStack, hideModal, isGameActive, miscUiState, showModal } from './globalState'
+import { isGameActive, miscUiState } from './globalState'
 import { options } from './optionsStorage'
-import { appStatusState, resetAppStatusState } from './react/AppStatusProvider'
 import { notificationProxy, showNotification } from './react/NotificationProvider'
 
 export const goFullscreen = async (doToggle = false) => {
@@ -122,39 +121,6 @@ export const isMajorVersionGreater = (ver1: string, ver2: string) => {
   return +a1 > +a2 || (+a1 === +a2 && +b1 > +b2)
 }
 
-let ourLastStatus: string | undefined = ''
-export const setLoadingScreenStatus = function (status: string | undefined | null, isError = false, hideDots = false, fromFlyingSquid = false, minecraftJsonMessage?: Record<string, any>) {
-  // null can come from flying squid, should restore our last status
-  if (status === null) {
-    status = ourLastStatus
-  } else if (!fromFlyingSquid) {
-    ourLastStatus = status
-  }
-  fromFlyingSquid = false
-
-  if (status === undefined) {
-    appStatusState.status = ''
-
-    hideModal({ reactType: 'app-status' }, {}, { force: true })
-    return
-  }
-
-  if (!activeModalStack.some(x => x.reactType === 'app-status')) {
-    // just showing app status
-    resetAppStatusState()
-  }
-  showModal({ reactType: 'app-status' })
-  if (appStatusState.isError) {
-    miscUiState.gameLoaded = false
-    return
-  }
-  appStatusState.hideDots = hideDots
-  appStatusState.isError = isError
-  appStatusState.lastStatus = isError ? appStatusState.status : ''
-  appStatusState.status = status
-  appStatusState.minecraftJsonMessage = minecraftJsonMessage ?? null
-}
-
 // doesn't support snapshots
 export const toMajorVersion = version => {
   const [a, b] = (String(version)).split('.')
@@ -213,4 +179,58 @@ export const reportWarningOnce = (id: string, message: string) => {
   if (reportedWarnings.has(id)) return
   reportedWarnings.add(id)
   console.warn(message)
+}
+
+export interface ParsedServerAddress {
+  host: string
+  port?: string
+  version?: string
+  isWebSocket: boolean
+}
+
+export const parseServerAddress = (address: string | undefined): ParsedServerAddress => {
+  if (!address) {
+    return { host: '', isWebSocket: false }
+  }
+
+  address = address.replace(/^https?:\/\//, '')
+
+  const isWebSocket = address.startsWith('ws://') || address.startsWith('wss://')
+  if (isWebSocket) {
+    return { host: address, isWebSocket: true }
+  }
+
+  // Check for version in format host:version or host:port:version
+  const parts = address.split(':')
+  if (parts.length === 2 && parts[1].includes('.')) {
+    return {
+      host: parts[0],
+      version: parts[1],
+      isWebSocket: false
+    }
+  }
+
+  if (parts.length === 3) {
+    return {
+      host: parts[0],
+      port: parts[1],
+      version: parts[2],
+      isWebSocket: false
+    }
+  }
+
+  // Standard host:port format
+  const hostPort = /:\d+$/.exec(address)
+  if (hostPort) {
+    return {
+      host: address.slice(0, -hostPort[0].length),
+      port: hostPort[0].slice(1),
+      isWebSocket: false
+    }
+  }
+
+  return {
+    host: address,
+    isWebSocket: false
+  }
 }
