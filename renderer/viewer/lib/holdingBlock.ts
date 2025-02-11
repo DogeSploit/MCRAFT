@@ -436,70 +436,53 @@ export default class HoldingBlock {
 
   getHandHeld3d () {
     const type = this.lastHeldItem?.type ?? 'hand'
+    const side = this.offHand ? 'Left' : 'Right'
 
-    let scale = type === 'item' ? 0.68 * 1.15 : 0.45 * 1.15
-
-    const position = {
+    let scale = 0.8 * 1.15 // default scale for hand
+    let position = {
       x: 0.4,
       y: -0.7,
       z: -0.45
     }
+    let rotation = {
+      x: -32.4,
+      y: 42.8,
+      z: -41.3,
+      yOuter: 0
+    }
 
     if (type === 'item') {
-      position.x = -0.05
-      // position.y -= 3.2 / 10
-      // position.z += 1.13 / 10
-    }
-
-    if (type === 'hand') {
-      // position.x = viewer.camera.aspect > 1 ? 0.7 : 1.1
-      position.y = -0.8
-      scale = 0.8 * 1.15
-    }
-
-    const rotations = {
-      block: {
-        x: 0,
-        y: -45 + 90,
-        z: 0,
-        yOuter: 0
-      },
-      // hand: {
-      //   x: 166.7,
-      //   // y: -180,
-      //   y: -165.2,
-      //   // z: -156.3,
-      //   z: -134.2,
-      //   yOuter: -81.1
-      // },
-      hand: {
-        x: -32.4,
-        // y: 25.1
-        y: 42.8,
-        z: -41.3,
-        yOuter: 0
-      },
-      // item: {
-      //   x: -174,
-      //   y: 47.3,
-      //   z: -134.2,
-      //   yOuter: -41.2
-      // }
-      item: {
-        // x: -174,
-        // y: 47.3,
-        // z: -134.2,
-        // yOuter: -41.2
-        x: 0,
-        // y: -90, // todo thats the correct one but we don't make it look too cheap because of no depth
-        y: -70,
-        z: window.z ?? 25,
+      const itemData = rotationPositionData[`item${side}`]
+      position = {
+        x: -0.05,
+        y: -0.7,
+        z: -0.45
+      }
+      rotation = {
+        x: itemData.rotation[0],
+        y: itemData.rotation[1],
+        z: itemData.rotation[2],
         yOuter: 0
       }
+      scale = itemData.scale[0] * 1.15
+    } else if (type === 'block') {
+      const blockData = rotationPositionData[`block${side}`]
+      position = {
+        x: 0.4,
+        y: -0.7,
+        z: -0.45
+      }
+      rotation = {
+        x: blockData.rotation[0],
+        y: blockData.rotation[1],
+        z: blockData.rotation[2],
+        yOuter: 0
+      }
+      scale = blockData.scale[0] * 1.15
     }
 
     return {
-      rotation: rotations[type],
+      rotation,
       position,
       scale
     }
@@ -762,7 +745,7 @@ class HandSwingAnimator {
     // Shared parameters
     animationTime: 250,
     animationStage: 0,
-    useClassicSwing: true
+    useClassicSwing: false
   }
 
   private readonly debugGui: DebugGui
@@ -902,23 +885,6 @@ export const getBlockMeshFromModel = (material: THREE.Material, model: BlockMode
   })
   return getThreeBlockModelGroup(material, [[worldRenderModel]], undefined, 'plains', loadedData)
 }
-
-addEventListener('keydown', (e) => {
-  window.playerState.disableStateUpdates = true
-  if (e.code === 'KeyR') {
-    //@ts-expect-error
-    viewer.world.holdingBlock.handAnimator.startSwing(true)
-  }
-  if (e.code === 'ArrowLeft') {
-    window.playerState.movementState = 'SNEAKING'
-  }
-  if (e.code === 'ArrowDown') {
-    window.playerState.movementState = 'WALKING'
-  }
-  if (e.code === 'ArrowUp') {
-    window.playerState.movementState = 'SPRINTING'
-  }
-})
 
 setTimeout(() => {
   //@ts-expect-error
