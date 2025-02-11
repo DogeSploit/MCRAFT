@@ -1,3 +1,4 @@
+
 import * as THREE from 'three'
 import * as tweenJs from '@tweenjs/tween.js'
 import worldBlockProvider from 'mc-assets/dist/worldBlockProvider'
@@ -225,7 +226,7 @@ export default class HoldingBlock {
     }
 
     // Only update idle animation if not swinging
-    if (this.swingAnimator?.isCurrentlySwinging()) {
+    if (this.swingAnimator?.isCurrentlySwinging() || this.swingAnimator?.debugParams.animationStage) {
       this.swingAnimator?.update()
     } else {
       this.idleAnimator?.update()
@@ -558,7 +559,7 @@ class HandIdleAnimator {
 
     // Initialize debug GUI
     this.debugGui = new DebugGui('idle_animator', this.debugParams)
-    this.debugGui.visible = false
+    // this.debugGui.activate()
   }
 
   private startIdleAnimation () {
@@ -720,32 +721,29 @@ class HandSwingAnimator {
   private readonly originalPosition: THREE.Vector3
   private readonly originalScale: THREE.Vector3
 
-  // Debug parameters for both animation styles
-  private readonly debugParams = {
-    // Classic swing parameters
-    classicRotationMax: 60,
-    classicPositionX: 0.2,
-    classicPositionY: 0.6,
-    classicPositionZ: 0.3,
-    classicScaleReduction: 0.2,
-
-    // New swing parameters
-    newRotationX: -0.513_126_800_086_333, // Hand rotation
-    newRotationZ: 1.591_740_277_818_83, // Hand rotation
-    newRotationBlockX: -1.539_380_400_258_999_2, // Block/item rotation
-    newRotationBlockZ: 0.620_778_708_349_344, // Block/item rotation
-    newPositionX: -0.1,
-    newPositionY: -0.1,
-    newPositionZ: 0.2,
-    // Item specific position
-    newPositionItemX: 0.1,
-    newPositionItemY: -1.02,
-    newPositionItemZ: 0.648,
-
-    // Shared parameters
+  readonly debugParams = {
+    // Animation timing
     animationTime: 250,
     animationStage: 0,
-    useClassicSwing: false
+    useClassicSwing: true,
+
+    // Item/Block animation parameters
+    itemSwingXPosScale: -0.8,
+    itemSwingYPosScale: 0.2,
+    itemSwingZPosScale: -0.2,
+    itemHeightScale: -0.6,
+    itemPreswingRotY: 45,
+    itemSwingXRotAmount: -30,
+    itemSwingYRotAmount: -35,
+    itemSwingZRotAmount: -5,
+
+    // Hand/Arm animation parameters
+    armSwingXPosScale: -0.3,
+    armSwingYPosScale: 0.4,
+    armSwingZPosScale: -0.4,
+    armSwingYRotAmount: 70,
+    armSwingZRotAmount: -20,
+    armHeightScale: -0.6
   }
 
   private readonly debugGui: DebugGui
@@ -765,9 +763,24 @@ class HandSwingAnimator {
         min: 0,
         max: 1,
         step: 0.01
-      }
+      },
+      // Add ranges for all animation parameters
+      itemSwingXPosScale: { min: -2, max: 2, step: 0.1 },
+      itemSwingYPosScale: { min: -2, max: 2, step: 0.1 },
+      itemSwingZPosScale: { min: -2, max: 2, step: 0.1 },
+      itemHeightScale: { min: -2, max: 2, step: 0.1 },
+      itemPreswingRotY: { min: -180, max: 180, step: 5 },
+      itemSwingXRotAmount: { min: -180, max: 180, step: 5 },
+      itemSwingYRotAmount: { min: -180, max: 180, step: 5 },
+      itemSwingZRotAmount: { min: -180, max: 180, step: 5 },
+      armSwingXPosScale: { min: -2, max: 2, step: 0.1 },
+      armSwingYPosScale: { min: -2, max: 2, step: 0.1 },
+      armSwingZPosScale: { min: -2, max: 2, step: 0.1 },
+      armSwingYRotAmount: { min: -180, max: 180, step: 5 },
+      armSwingZRotAmount: { min: -180, max: 180, step: 5 },
+      armHeightScale: { min: -2, max: 2, step: 0.1 }
     })
-    this.debugGui.visible = false
+    this.debugGui.activate()
   }
 
   update () {
@@ -811,50 +824,42 @@ class HandSwingAnimator {
     this.handMesh.position.copy(this.originalPosition)
     this.handMesh.scale.copy(this.originalScale)
 
-    if (this.debugParams.useClassicSwing) {
-      // Classic Minecraft-style swing animation
-      const rotationAngle = Math.min(90 * stage, this.debugParams.classicRotationMax)
-      this.handMesh.rotation.z += THREE.MathUtils.degToRad(rotationAngle)
+    // Calculate swing progress
+    const swingProgress = stage
+    const sqrtProgress = Math.sqrt(swingProgress)
+    const sinProgress = Math.sin(swingProgress * this.PI)
+    const sinSqrtProgress = Math.sin(sqrtProgress * this.PI)
 
-      // Complex positional movement
-      this.handMesh.position.x += Math.cos(stage * this.PI) * this.debugParams.classicPositionX - stage * 0.5
-      this.handMesh.position.y += Math.sin(stage * this.PI) * this.debugParams.classicPositionY - 0.3
-      this.handMesh.position.z += Math.sin(stage * this.PI) * this.debugParams.classicPositionZ
+    if (this.type === 'hand') {
+      // Hand animation
+      const xOffset = this.debugParams.armSwingXPosScale * sinSqrtProgress
+      const yOffset = this.debugParams.armSwingYPosScale * Math.sin(sqrtProgress * this.PI * 2)
+      const zOffset = this.debugParams.armSwingZPosScale * sinProgress
 
-      // Scale variation
-      const scale = 1 - stage * this.debugParams.classicScaleReduction
-      this.handMesh.scale.multiplyScalar(scale)
+      this.handMesh.position.x += xOffset
+      this.handMesh.position.y += yOffset + this.debugParams.armHeightScale * swingProgress
+      this.handMesh.position.z += zOffset
+
+      // Rotations
+      this.handMesh.rotation.y += THREE.MathUtils.degToRad(this.debugParams.armSwingYRotAmount * sinSqrtProgress)
+      this.handMesh.rotation.z += THREE.MathUtils.degToRad(this.debugParams.armSwingZRotAmount * sinProgress)
     } else {
-      // New smooth swing animation
-      const swingStage = stage < 0.5 ? stage * 2 : 2 - (stage * 2)
+      // Item/Block animation
+      const xOffset = this.debugParams.itemSwingXPosScale * sinSqrtProgress
+      const yOffset = this.debugParams.itemSwingYPosScale * Math.sin(sqrtProgress * this.PI * 2)
+      const zOffset = this.debugParams.itemSwingZPosScale * sinProgress
 
-      // Forward and down motion
-      const isBlock = this.type === 'block'
-      const rotX = isBlock ? this.debugParams.newRotationBlockX : this.debugParams.newRotationX
-      const rotZ = isBlock ? this.debugParams.newRotationBlockZ : this.debugParams.newRotationZ
+      this.handMesh.position.x += xOffset
+      this.handMesh.position.y += yOffset + this.debugParams.itemHeightScale * swingProgress
+      this.handMesh.position.z += zOffset
 
-      this.handMesh.rotation.x += rotX * swingStage
-      // Add leftward motion
-      this.handMesh.rotation.z += rotZ * swingStage
+      // Pre-swing rotation
+      this.handMesh.rotation.y += THREE.MathUtils.degToRad(this.debugParams.itemPreswingRotY)
 
-      // Add position offset during swing
-      const posOffset = new THREE.Vector3(
-        this.debugParams.newPositionX,
-        this.debugParams.newPositionY,
-        this.debugParams.newPositionZ
-      )
-
-      // Use item-specific position if it's an item
-      if (this.type === 'item') {
-        posOffset.set(
-          this.debugParams.newPositionItemX,
-          this.debugParams.newPositionItemY,
-          this.debugParams.newPositionItemZ
-        )
-      }
-
-      posOffset.multiplyScalar(swingStage)
-      this.handMesh.position.add(posOffset)
+      // Swing rotations
+      this.handMesh.rotation.x += THREE.MathUtils.degToRad(this.debugParams.itemSwingXRotAmount * sinProgress)
+      this.handMesh.rotation.y += THREE.MathUtils.degToRad(this.debugParams.itemSwingYRotAmount * sinSqrtProgress)
+      this.handMesh.rotation.z += THREE.MathUtils.degToRad(this.debugParams.itemSwingZRotAmount * sinProgress)
     }
   }
 

@@ -13,16 +13,15 @@ export class DebugGui {
   private target: any
   private readonly params: string[]
   private readonly paramsMeta: Record<string, ParamMeta>
-  private _visible = true // New visibility state
+  private _visible = false // Default to not visible
   private readonly initialValues: Record<string, any> = {} // Store initial values
+  private initialized = false
 
   constructor (id: string, target: any, params?: string[], paramsMeta?: Record<string, ParamMeta>) {
     this.gui = new GUI()
     this.storageKey = `debug_params_${id}`
     this.target = target
     this.paramsMeta = paramsMeta ?? {}
-
-    // If params not provided, get all properties from target
     this.params = params ?? Object.keys(target)
 
     // Store initial values
@@ -30,17 +29,19 @@ export class DebugGui {
       this.initialValues[param] = target[param]
     }
 
-    // Load saved values from localStorage
-    this.loadSavedValues()
+    // Hide by default
+    this.gui.domElement.style.display = 'none'
+  }
 
-    // Setup GUI controls
-    this.setupControls()
-
-    // Set initial visibility from localStorage if exists
-    const savedVisibility = localStorage.getItem(`${this.storageKey}_visible`)
-    if (savedVisibility !== null) {
-      this.visible = savedVisibility === 'true'
+  // Initialize and show the GUI
+  activate () {
+    if (!this.initialized) {
+      this.loadSavedValues()
+      this.setupControls()
+      this.initialized = true
     }
+    this.show()
+    return this
   }
 
   // Getter for visibility
