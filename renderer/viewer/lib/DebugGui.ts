@@ -41,12 +41,6 @@ export class DebugGui {
     if (savedVisibility !== null) {
       this.visible = savedVisibility === 'true'
     }
-
-    // Save values when window unloads
-    window.addEventListener('unload', () => {
-      this.saveValues()
-      this.saveVisibility()
-    })
   }
 
   // Getter for visibility
@@ -81,13 +75,17 @@ export class DebugGui {
     }
   }
 
-  private saveValues () {
+  private saveValues (deleteKey = false) {
     try {
       const values = {}
       for (const param of this.params) {
         values[param] = this.target[param]
       }
-      localStorage.setItem(this.storageKey, JSON.stringify(values))
+      if (deleteKey) {
+        localStorage.removeItem(this.storageKey)
+      } else {
+        localStorage.setItem(this.storageKey, JSON.stringify(values))
+      }
     } catch (e) {
       console.warn('Failed to save debug values:', e)
     }
@@ -108,7 +106,7 @@ export class DebugGui {
       for (const param of this.params) {
         this.target[param] = this.initialValues[param]
       }
-      this.saveValues()
+      this.saveValues(true)
       this.gui.destroy()
       this.gui = new GUI()
       this.setupControls()
@@ -154,7 +152,6 @@ export class DebugGui {
 
   // Method to destroy the GUI and clean up
   destroy () {
-    this.saveValues()
     this.saveVisibility()
     this.gui.destroy()
   }
