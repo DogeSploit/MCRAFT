@@ -94,7 +94,7 @@ export default class HoldingBlock {
   holdingBlock: THREE.Object3D | undefined = undefined
   blockSwapAnimation: {
     switcher: SmoothSwitcher
-    hidden: boolean
+    // hidden: boolean
   } | undefined = undefined
   cameraGroup = new THREE.Mesh()
   objectOuterGroup = new THREE.Group() // 3
@@ -158,13 +158,11 @@ export default class HoldingBlock {
     this.cameraGroup = new THREE.Mesh()
   }
 
-  async startSwing () {
-    this.idleAnimator?.destroy()
-    this.idleAnimator = undefined
+  startSwing () {
     this.swingAnimator?.startSwing()
   }
 
-  async stopSwing () {
+  stopSwing () {
     this.swingAnimator?.stopSwing()
   }
 
@@ -236,7 +234,7 @@ export default class HoldingBlock {
   //   new tweenJs.Tween(group.rotation).to({ z: THREE.MathUtils.degToRad(90) }, 1000).yoyo(true).repeat(Infinity).start()
   // }
 
-  async playBlockSwapAnimation () {
+  async playBlockSwapAnimation (forceState?: 'appeared' | 'disappeared') {
     this.blockSwapAnimation ??= {
       switcher: new SmoothSwitcher(
         () => ({
@@ -248,30 +246,34 @@ export default class HoldingBlock {
         {
           y: 16 // units per second
         }
-      ),
-      hidden: false
+      )
     }
 
-    const targetY = this.objectInnerGroup.position.y + (this.objectInnerGroup.scale.y * 1.5 * (this.blockSwapAnimation.hidden ? 1 : -1))
+    const newState = this.blockSwapAnimation.switcher.currentStateName === 'disappeared' ? 'appeared' : 'disappeared'
+    if (forceState && newState !== forceState) throw new Error(`forceState does not match current state ${newState} !== ${forceState}`)
 
-    return new Promise<void>((resolve) => {
+    const targetY = this.objectInnerGroup.position.y + (this.objectInnerGroup.scale.y * 1.5 * (newState === 'appeared' ? 1 : -1))
+
+    if (newState === this.blockSwapAnimation.switcher.transitioningToStateName) {
+      return false
+    }
+
+    return new Promise<boolean>((resolve) => {
       this.blockSwapAnimation!.switcher.transitionTo(
         { y: targetY },
-        this.blockSwapAnimation!.hidden ? 'appeared' : 'disappeared',
+        newState,
         () => {
-          if (this.blockSwapAnimation!.hidden) {
-            this.blockSwapAnimation = undefined
-          } else {
-            this.blockSwapAnimation!.hidden = !this.blockSwapAnimation!.hidden
-          }
-          resolve()
+          resolve(true)
+        },
+        () => {
+          resolve(false)
         }
       )
     })
   }
 
   isDifferentItem (block: HandItemBlock | undefined) {
-    return this.lastHeldItem && (this.lastHeldItem.name !== block?.name || JSON.stringify(this.lastHeldItem.properties) !== JSON.stringify(block?.properties ?? '{}'))
+    return !this.lastHeldItem || (this.lastHeldItem.name !== block?.name || JSON.stringify(this.lastHeldItem.fullItem) !== JSON.stringify(block?.fullItem ?? '{}'))
   }
 
   updateCameraGroup () {
@@ -357,18 +359,19 @@ export default class HoldingBlock {
   }
 
   async setNewItem (handItem?: HandItemBlock) {
-    let animatingCurrent = false
-    if (!this.blockSwapAnimation && this.isDifferentItem(handItem)) {
-      animatingCurrent = true
-      await this.playBlockSwapAnimation()
+    if (!this.isDifferentItem(handItem)) return
+    let playAppearAnimation = false
+    if (this.holdingBlock) {
+      // play disappear animation
+      playAppearAnimation = true
+      const result = await this.playBlockSwapAnimation()
+      if (!result) return
       this.holdingBlock?.removeFromParent()
       this.holdingBlock = undefined
     }
 
     this.lastHeldItem = handItem
     if (!handItem) {
-      this.holdingBlock?.removeFromParent()
-      this.holdingBlock = undefined
       this.swingAnimator?.stopSwing()
       this.swingAnimator = undefined
       this.idleAnimator = undefined
@@ -388,7 +391,7 @@ export default class HoldingBlock {
     this.objectInnerGroup = new THREE.Group()
     this.objectInnerGroup.add(blockOuterGroup)
     this.objectInnerGroup.position.set(-0.5, -0.5, -0.5)
-    if (animatingCurrent) {
+    if (playAppearAnimation) {
       this.objectInnerGroup.position.y -= this.objectInnerGroup.scale.y * 1.5
     }
     Object.assign(blockOuterGroup.position, { x: 0.5, y: 0.5, z: 0.5 })
@@ -400,8 +403,8 @@ export default class HoldingBlock {
     const rotationDeg = this.getHandHeld3d().rotation
     this.objectOuterGroup.rotation.y = THREE.MathUtils.degToRad(rotationDeg.yOuter)
 
-    if (animatingCurrent) {
-      await this.playBlockSwapAnimation()
+    if (playAppearAnimation) {
+      await this.playBlockSwapAnimation('appeared')
     }
 
     this.swingAnimator = new HandSwingAnimator(this.holdingBlockInnerGroup)
@@ -478,8 +481,8 @@ class HandIdleAnimator {
   // Debug parameters
   private readonly debugParams = {
     // Transition durations for different state changes
-    walkingSpeed: 7,
-    sprintingSpeed: 10,
+    walkingSpeed: 9,
+    sprintingSpeed: 16,
     walkingAmplitude: { x: 1 / 30, y: 1 / 10, rotationZ: 0.25 },
     sprintingAmplitude: { x: 1 / 30, y: 1 / 10, rotationZ: 0.4 }
   }
@@ -838,10 +841,10 @@ class HandSwingAnimator {
   }
 
   startSwing () {
+    this.stopRequested = false
     if (this.isAnimating) return
 
     this.isAnimating = true
-    this.stopRequested = false
     this.animationTimer = 0
     this.lastTime = performance.now()
   }

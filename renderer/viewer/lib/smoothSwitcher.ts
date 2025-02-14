@@ -20,7 +20,8 @@ export class SmoothSwitcher {
   // private readonly currentState: StateProperties = {}
   private readonly defaultState: StateProperties
   private readonly speeds: Record<string, number>
-  public stateName = ''
+  public currentStateName = ''
+  public transitioningToStateName = ''
 
   constructor (
     public getState: StateGetterFn,
@@ -83,12 +84,15 @@ export class SmoothSwitcher {
     newState: Partial<StateProperties>,
     stateName?: string,
     onEnd?: () => void,
-    easing: (amount: number) => number = tweenJs.Easing.Linear.None
+    easing: (amount: number) => number = tweenJs.Easing.Linear.None,
+    onCancelled?: () => void
   ): void {
     if (this.isTransitioning) {
+      onCancelled?.()
       this.animationController.forceFinish()
     }
 
+    this.transitioningToStateName = stateName ?? ''
     const state = this.getState()
 
     const duration = this.calculateDuration(newState)
@@ -106,7 +110,8 @@ export class SmoothSwitcher {
         })
         .onComplete(() => {
           this.animationController.forceFinish()
-          this.stateName = stateName ?? ''
+          this.currentStateName = this.transitioningToStateName
+          this.transitioningToStateName = ''
           onEnd?.()
         })
         .start()
@@ -139,8 +144,13 @@ export class SmoothSwitcher {
   /**
    * Start a new transition to the specified state
    */
-  transitionTo (newState: Partial<StateProperties>, stateName?: string, onEnd?: () => void): void {
-    this.startTransition(newState, stateName, onEnd)
+  transitionTo (
+    newState: Partial<StateProperties>,
+    stateName?: string,
+    onEnd?: () => void,
+    onCancelled?: () => void
+  ): void {
+    this.startTransition(newState, stateName, onEnd, tweenJs.Easing.Linear.None, onCancelled)
   }
 
   /**

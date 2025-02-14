@@ -185,7 +185,7 @@ viewer.entities.getItemUv = (item, specificProps) => {
       ...item,
       nbt: null,
       name: model,
-    })
+    }, false, true)
 
     if (!renderInfo) throw new Error(`Failed to get render info for item ${name}`)
 

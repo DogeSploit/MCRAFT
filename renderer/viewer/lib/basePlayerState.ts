@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import { Vec3 } from 'vec3'
 import TypedEmitter from 'typed-emitter'
 import { ItemSelector } from 'mc-assets/dist/itemDefinitions'
+import { proxy } from 'valtio'
 import { HandItemBlock } from './holdingBlock'
 
 export type MovementState = 'NOT_MOVING' | 'WALKING' | 'SPRINTING' | 'SNEAKING'
@@ -40,7 +41,9 @@ export class BasePlayerState implements IPlayerState {
   getHeldItem? (isLeftHand: boolean): HandItemBlock | undefined {
     throw new Error('Method not implemented.')
   }
-  reactive: { playerSkin: string | undefined }
+  reactive = proxy({
+    playerSkin: undefined
+  })
   protected movementState: MovementState = 'NOT_MOVING'
   protected velocity = new Vec3(0, 0, 0)
   protected onGround = true
