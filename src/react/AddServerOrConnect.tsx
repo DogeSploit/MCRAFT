@@ -6,8 +6,7 @@ import Screen from './Screen'
 import Input from './Input'
 import Button from './Button'
 import SelectGameVersion from './SelectGameVersion'
-import { useIsSmallWidth, usePassesWindowDimensions } from './simpleHooks'
-import { usePassesScaledDimensions } from './utilsApp'
+import { usePassesScaledDimensions } from './UIProvider'
 
 export interface BaseServerInfo {
   ip: string

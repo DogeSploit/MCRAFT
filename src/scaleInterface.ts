@@ -1,6 +1,8 @@
-import { proxy } from 'valtio'
+import { proxy, useSnapshot } from 'valtio'
 import { subscribeKey } from 'valtio/utils'
+import { useMedia } from 'react-use'
 import { options, watchValue } from './optionsStorage'
+import { useScale } from './react/UIProvider'
 
 export const currentScaling = proxy({
   scale: 1,
@@ -35,3 +37,7 @@ watchValue(currentScaling, (c) => {
   document.documentElement.style.setProperty('--guiScale', String(c.scale))
 })
 window.addEventListener('resize', setScale)
+
+export const useAppScale = () => {
+  return useSnapshot(currentScaling).scale
+}
