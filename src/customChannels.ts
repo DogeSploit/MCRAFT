@@ -1,4 +1,8 @@
+import { Vec3 } from 'vec3'
+import { options } from './optionsStorage'
+
 customEvents.on('mineflayerBotCreated', async () => {
+  if (!options.customChannels) return
   await new Promise(resolve => {
     bot.once('login', () => {
       resolve(true)
@@ -11,7 +15,7 @@ customEvents.on('mineflayerBotCreated', async () => {
     'container',
     [
       {
-        name: 'worldName',
+        name: 'worldName', // currently not used
         type: ['pstring', { countType: 'i16' }]
       },
       {
@@ -37,7 +41,7 @@ customEvents.on('mineflayerBotCreated', async () => {
 
   bot._client.on(CHANNEL_NAME as any, (data) => {
     const { worldName, x, y, z, model } = data
-    console.log('Received model data:', { worldName, x, y, z, model })
+    console.debug('Received model data:', { worldName, x, y, z, model })
 
     if (viewer?.world) {
       const chunkX = Math.floor(x / 16) * 16
@@ -60,12 +64,12 @@ customEvents.on('mineflayerBotCreated', async () => {
       }
 
       // Trigger update
-      // const block = viewer.world.getBlock(new Vec3(x, y, z))
-      // if (block) {
-      //   viewer.world.setBlockStateId(new Vec3(x, y, z), block.stateId)
-      // }
+      const block = worldView!.world.getBlock(new Vec3(x, y, z))
+      if (block) {
+        worldView!.world.setBlockStateId(new Vec3(x, y, z), block.stateId)
+      }
     }
   })
 
-  console.log(`registered ${CHANNEL_NAME} channel`)
+  console.debug(`registered custom channel ${CHANNEL_NAME} channel`)
 })

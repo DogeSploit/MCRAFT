@@ -15,6 +15,7 @@ import { LineMaterial } from 'three-stdlib'
 import christmasPack from 'mc-assets/dist/textureReplacements/christmas'
 import { ItemsRenderer } from 'mc-assets/dist/itemsRenderer'
 import itemDefinitionsJson from 'mc-assets/dist/itemDefinitions.json'
+import worldBlockProvider, { WorldBlockProvider } from 'mc-assets/dist/worldBlockProvider'
 import { dynamicMcDataFiles } from '../../buildMesherConfig.mjs'
 import { toMajorVersion } from '../../../src/utils'
 import { buildCleanupDecorator } from './cleanupDecorator'
@@ -153,6 +154,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
   customBlockModels = new Map<string, CustomBlockModels>()
 
   abstract outputFormat: 'threeJs' | 'webgpu'
+  worldBlockProvider: WorldBlockProvider
 
   abstract changeBackgroundColor (color: [number, number, number]): void
 
@@ -317,7 +319,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.mesherConfig.version = this.version!
 
     this.sendMesherMcData()
-    await this.updateTexturesData()
+    await this.updateAssetsData()
   }
 
   sendMesherMcData () {
@@ -334,7 +336,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     }
   }
 
-  async updateTexturesData (resourcePackUpdate = false, prioritizeBlockTextures?: string[]) {
+  async updateAssetsData (resourcePackUpdate = false, prioritizeBlockTextures?: string[]) {
     const blocksAssetsParser = new AtlasParser(this.sourceData.blocksAtlases, blocksAtlasLatest, blocksAtlasLegacy)
     const itemsAssetsParser = new AtlasParser(this.sourceData.itemsAtlases, itemsAtlasLatest, itemsAtlasLegacy)
 
@@ -358,6 +360,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.itemsAtlasParser = new AtlasParser({ latest: itemsAtlas }, itemsCanvas.toDataURL())
 
     this.itemsRenderer = new ItemsRenderer(this.version!, this.blockstatesModels, this.itemsAtlasParser, this.blocksAtlasParser)
+    this.worldBlockProvider = worldBlockProvider(this.blockstatesModels, this.blocksAtlasParser.atlas, 'latest')
 
     const texture = await new THREE.TextureLoader().loadAsync(this.blocksAtlasParser.latestImage)
     texture.magFilter = THREE.NearestFilter
