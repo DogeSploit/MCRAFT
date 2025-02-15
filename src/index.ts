@@ -67,6 +67,7 @@ import { isCypress } from './standaloneUtils'
 import {
   removePanorama
 } from './panorama'
+import { getItemDefinition } from 'mc-assets/dist/itemDefinitions'
 
 import { startLocalServer, unsupportedLocalServerFeatures } from './createLocalServer'
 import defaultServerOptions from './defaultLocalServerOptions'
@@ -105,6 +106,7 @@ import { getWebsocketStream } from './mineflayer/websocket-core'
 import { appQueryParams, appQueryParamsArray } from './appParams'
 import { updateCursor } from './cameraRotationControls'
 import { pingServerVersion } from './mineflayer/minecraft-protocol-extra'
+import { playerState, PlayerStateManager } from './mineflayer/playerState'
 import { states } from 'minecraft-protocol'
 import { initMotionTracking } from './react/uiMotion'
 import { UserError } from './mineflayer/userError'
@@ -162,21 +164,29 @@ if (isIphone) {
 if (appQueryParams.testCrashApp === '2') throw new Error('test')
 
 // Create viewer
-const viewer: import('renderer/viewer/lib/viewer').Viewer = new Viewer(renderer)
+const viewer: import('renderer/viewer/lib/viewer').Viewer = new Viewer(renderer, undefined, playerState)
 window.viewer = viewer
-viewer.getMineflayerBot = () => bot
 // todo unify
-viewer.entities.getItemUv = (item) => {
+viewer.entities.getItemUv = (item, specificProps) => {
   const idOrName = item.itemId ?? item.blockId
   try {
     const name = typeof idOrName === 'number' ? loadedData.items[idOrName]?.name : idOrName
     if (!name) throw new Error(`Item not found: ${idOrName}`)
 
-    const renderInfo = renderSlot({
-      name,
-      nbt: null,
-      ...item
+    const itemSelector = playerState.getItemSelector({
+      ...specificProps
     })
+    const model = getItemDefinition(viewer.world.itemsDefinitionsStore, {
+      name,
+      version: viewer.world.texturesVersion!,
+      properties: itemSelector
+    })?.model ?? name
+
+    const renderInfo = renderSlot({
+      ...item,
+      nbt: null,
+      name: model,
+    }, false, true)
 
     if (!renderInfo) throw new Error(`Failed to get render info for item ${name}`)
 
@@ -410,10 +420,12 @@ export async function connect (connectOptions: ConnectOptions) {
           throw err
         }
       }
+      const oldStatus = appStatusState.status
       setLoadingScreenStatus('Loading minecraft assets')
       viewer.world.blockstatesModels = await import('mc-assets/dist/blockStatesModels.json')
       void viewer.setVersion(version, options.useVersionsTextures === 'latest' ? version : options.useVersionsTextures)
       miscUiState.loadedDataVersion = version
+      setLoadingScreenStatus(oldStatus)
     }
 
     let finalVersion = connectOptions.botVersion || (singleplayer ? serverOptions.version : undefined)
@@ -745,6 +757,8 @@ export async function connect (connectOptions: ConnectOptions) {
     customEvents.emit('gameLoaded')
     if (p2pConnectTimeout) clearTimeout(p2pConnectTimeout)
 
+    playerState.onlineMode = !!connectOptions.authenticatedAccount
+
     setLoadingScreenStatus('Placing blocks (starting viewer)')
     localStorage.lastConnectOptions = JSON.stringify(connectOptions)
     connectOptions.onSuccessfulPlay?.()
@@ -998,6 +1012,4 @@ if (initialLoader) {
 }
 window.pageLoaded = true
 
-if (!reconnectOptions) {
-  void possiblyHandleStateVariable()
-}
+void possiblyHandleStateVariable()
