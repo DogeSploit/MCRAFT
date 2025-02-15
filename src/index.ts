@@ -419,10 +419,12 @@ export async function connect (connectOptions: ConnectOptions) {
           throw err
         }
       }
+      const oldStatus = appStatusState.status
       setLoadingScreenStatus('Loading minecraft assets')
       viewer.world.blockstatesModels = await import('mc-assets/dist/blockStatesModels.json')
       void viewer.setVersion(version, options.useVersionsTextures === 'latest' ? version : options.useVersionsTextures)
       miscUiState.loadedDataVersion = version
+      setLoadingScreenStatus(oldStatus)
     }
 
     let finalVersion = connectOptions.botVersion || (singleplayer ? serverOptions.version : undefined)

@@ -28,7 +28,7 @@ const updateFovAnimation = () => {
   const movementSpeedAttr = (bot.entity?.attributes?.['generic.movement_speed'] || bot.entity?.attributes?.['minecraft:movement_speed'] || bot.entity?.attributes?.['movement_speed'] || bot.entity?.attributes?.['minecraft:movementSpeed'])?.value || BASE_MOVEMENT_SPEED
   let currentSpeed = BASE_MOVEMENT_SPEED
   // todo
-  if (bot.controlState.sprint && !bot.controlState.sneak) {
+  if (bot.controlState?.sprint && !bot.controlState?.sneak) {
     currentSpeed *= 1.3
   }
   fovModifier *= (currentSpeed / movementSpeedAttr + 1) / 2
