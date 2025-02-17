@@ -31,10 +31,6 @@ const getInitialProxies = () => {
   if (miscUiState.appConfig?.defaultProxy) {
     proxies.push(miscUiState.appConfig.defaultProxy)
   }
-  if (localStorage['proxy']) {
-    proxies.push(localStorage['proxy'])
-    localStorage.removeItem('proxy')
-  }
   return proxies
 }
 
@@ -46,7 +42,7 @@ const MAX_CONCURRENT_REQUESTS = 10
 
 const Inner = ({ hidden, customServersList }: { hidden?: boolean, customServersList?: string[] }) => {
   const [proxies, setProxies] = useState<readonly string[]>(localStorage['proxies'] ? JSON.parse(localStorage['proxies']) : getInitialProxies())
-  const [selectedProxy, setSelectedProxy] = useState(proxyQs ?? localStorage.getItem('selectedProxy') ?? proxies?.[0] ?? '')
+  const [selectedProxy, setSelectedProxy] = useState(proxyQs ?? proxies?.[0] ?? '')
   const [serverEditScreen, setServerEditScreen] = useState<StoreServerItem | true | null>(null) // true for add
   const [defaultUsername, _setDefaultUsername] = useState(localStorage['username'] ?? (`mcrafter${Math.floor(Math.random() * 1000)}`))
   const [authenticatedAccounts, _setAuthenticatedAccounts] = useState<AuthenticatedAccount[]>(JSON.parse(localStorage['authenticatedAccounts'] || '[]'))
@@ -70,16 +66,10 @@ const Inner = ({ hidden, customServersList }: { hidden?: boolean, customServersL
     localStorage.setItem('username', newState)
   }
 
-  const saveNewProxy = () => {
-    if (!selectedProxy || proxyQs) return
-    localStorage.setItem('selectedProxy', selectedProxy)
-  }
-
   useEffect(() => {
     if (proxies.length) {
       localStorage.setItem('proxies', JSON.stringify(proxies))
     }
-    saveNewProxy()
   }, [proxies])
 
   const [serversList, setServersList] = useState<StoreServerItem[]>(() => (customServersList ? [] : getInitialServersList()))
@@ -315,13 +305,6 @@ const Inner = ({ hidden, customServersList }: { hidden?: boolean, customServersL
               setNewServersList(serversList)
             }
           }
-
-          // save new selected proxy (if new)
-          if (!proxies.includes(selectedProxy)) {
-            // setProxies([...proxies, selectedProxy])
-            localStorage.setItem('proxies', JSON.stringify([...proxies, selectedProxy]))
-          }
-          saveNewProxy()
         },
         serverIndex: shouldSave ? serversList.length.toString() : indexOrIp // assume last
       } satisfies ConnectOptions
