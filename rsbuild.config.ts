@@ -71,6 +71,7 @@ const appConfig = defineConfig({
         // publicDir: {
         //     name: 'assets',
         // },
+        port: 3003,
         proxy: {
             '/api': 'http://localhost:8080',
         },

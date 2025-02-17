@@ -13,8 +13,8 @@ export const getProxyDetails = async (proxyBaseUrl: string) => {
 export default async ({ tokenCaches, proxyBaseUrl, setProgressText = (text) => { }, setCacheResult, connectingServer }) => {
   let onMsaCodeCallback
   let connectingVersion = ''
-  // const authEndpoint = 'http://localhost:3000/'
-  // const sessionEndpoint = 'http://localhost:3000/session'
+  // const authEndpoint = 'http://localhost:3003/'
+  // const sessionEndpoint = 'http://localhost:3003/session'
   let authEndpoint: URL | undefined
   let sessionEndpoint: URL | undefined
   const result = await getProxyDetails(proxyBaseUrl)
