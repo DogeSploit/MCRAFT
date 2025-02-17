@@ -7,7 +7,7 @@ env:
 on:
   push:
     branches:
-      - next-disabled
+      - next
 jobs:
   deploy:
     runs-on: ubuntu-latest
