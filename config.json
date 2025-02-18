@@ -1,7 +1,7 @@
 {
   "version": 1,
   "defaultHost": "<from-proxy>",
-  "defaultProxy": "web-proxy-595756928555.us-central1.run.app",
+  "defaultProxy": "mcproxy.kradle.ai",
   "mapsProvider": "https://maps.mcraft.fun/",
   "peerJsServer": "",
   "peerJsServerFallback": "https://p2p.mcraft.fun",
