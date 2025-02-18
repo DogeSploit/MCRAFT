@@ -1,6 +1,72 @@
 # Minecraft Web Client
 
-![banner](./docs-assets/banner.jpg)
+This is a browser implementation of Minecraft we embed inside the Kradle  frontend to view session. This repo contains 2 parts -
+
+## First: A Web Client
+
+The web client is [deployed to Vercel](https://vercel.com/kradle-f5bad6db/minecraft-web-client) and is accessible at https://mcraft.kradle.ai. The Kradle frontend at https://app.kradle.ai uses an `<iframe>` to embed the viewer. We make use of query parameters to provide the server details to autoconnect.
+
+## Second: A Websocket Proxy
+
+Your browser can't connect and communicate directly with a minecraft java server. For this reason, we use a proxy server that can translate those packets into websocket messages, and the other way around.
+
+The proxy is deployed on [GCP Cloud Run](https://console.cloud.google.com/run/detail/us-central1/web-proxy/metrics?project=mckradle-3c267) and is accessible at https://mcproxy.kradle.ai[^1]. 
+
+[^1]: You can check it's working by adding `/config.json` to the URL
+
+A proxy instance is stateless and is also not linked to a single client or a to a single minecraft server. A single instance of the proxy is actually capable of multiplexing multiple clients to multiple minecraft servers. 
+
+This means the proxy is quite efficient, and when needed, it can easily scale horizontally based on the sessions being viewed (using gcloud run's autoscaling)
+
+## Local development
+
+It's recommended to clone this repo into a folder called `minecraft-web-client` and place it alongside the [`frontend` repo](https://github.com/kradle-ai/frontend). The frontend repo will automatically use it when you run `npm run dev` there.
+
+### `tl;dr`
+0. Ensure you have [Node.js](https://nodejs.org) installed. Enable corepack with `corepack enable` *(1).
+1. Install dependencies: `pnpm i`
+2. Start the project in development mode: `pnpm start` or build the project for production: `pnpm build`
+
+See [CONTRIBUTING](CONTRIBUTING.md) for a breakdown of the repo and troubleshooting tips on getting it setup (it's mostly copied as-is from the upstream repo).
+
+
+## Deploy
+**Web Client** 
+
+Vercel automatically deploys the `next` branch to production.
+
+**Proxy**
+
+You most likely won't need to make any changes to the proxy, and so you don't need to deploy it.
+
+In the rare occasion you do, here's how.
+
+0. Make sure your `gcloud` CLI locally is configured to use the gcloud `dev` environment. You'll need permissions to push a docker image to GCR.
+1. (only needed first time) Run `make docker/login`
+2. Run `make docker/build`
+3. Run `make docker/push`
+    * (if you run into issues, try `gcloud auth login` and `make docker/login`)
+4. Run `make deploy`
+
+
+> TODO: We could setup Google Cloud Run continuous deployments to automatically deploy the `next` branch - but we should try not to rebuild on every commit since the proxy doesn't change often.
+
+
+## Notes
+This repo was cloned and we made some minimal changes needed for a great iframe spectator experience (such as disabling chat and command access, inventory access, a simpler pause menu, making nightime more visible, etc.)
+
+There's still a ton of code bloat here that's not relevant. For example
+* Loading zip world files
+* Single player and P2P modes (which uses memfs, peerjs, and other bloat)
+* Use of local storage (this iframe should be mostly stateless to prevent potential discrepencies as we make changes)
+* Unused Github workflows
+* etc.
+
+
+
+---
+
+# Original docs from the [upstream repo](https://github.com/zardoy/minecraft-web-client)
 
 Minecraft **clone** rewritten in TypeScript using the best modern web technologies. Minecraft vanilla-compatible client and integrated server packaged into a single web app.
 

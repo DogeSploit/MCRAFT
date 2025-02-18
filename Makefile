@@ -2,6 +2,7 @@ REGION=us-central1
 PROJECT_ID=mckradle-3c267
 DOCKER_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${env}-minecraft/web-proxy
 IMAGE_TAG=${DOCKER_URL}:latest
+SERVICE_NAME=web-proxy
 
 ifndef env
 	override env = dev
@@ -15,3 +16,6 @@ docker/build:
 
 docker/push:
 	docker push ${IMAGE_TAG}
+
+deploy:
+	gcloud run deploy ${SERVICE_NAME} --image ${IMAGE_TAG} --region ${REGION}

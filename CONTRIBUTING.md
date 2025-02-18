@@ -5,8 +5,6 @@ After forking the repository, run the following commands to get started:
 0. Ensure you have [Node.js](https://nodejs.org) installed. Enable corepack with `corepack enable` *(1).
 1. Install dependencies: `pnpm i`
 2. Start the project in development mode: `pnpm start` or build the project for production: `pnpm build`
-3. Read the [Tasks Categories](#tasks-categories) and [Workflow](#workflow) sections below
-4. Let us know if you are working on something and be sure to open a PR if you got any changes. Happy coding!
 
 *(1): If you are getting `Cannot find matching keyid` update corepack to the latest version with `npm i -g corepack`.
 *(2): If still something doesn't work ensure you have the right nodejs version with `node -v` (tested on 22.x)
@@ -95,7 +93,7 @@ Also there are [src/generatedClientPackets.ts](src/generatedClientPackets.ts) an
 - Use `start-prod` script to start the project in production mode after running the `build` script to build the project.
 - If CI is failing on the next branch for some reason, feel free to use the latest commit for release branch. We will update the base branch asap. Please, always make sure to allow maintainers do changes when opening PRs.
 
-## Tasks Categories
+## Tasks Categories (from usptream repo. not relevant to Kradle)
 
 (most important for now are on top).
 
@@ -166,7 +164,7 @@ Most of the tasks are straightforward to implement, just be sure to use a debugg
 
 New React components, improve UI (including mobile support).
 
-## Workflow
+## Workflow (from usptream repo. not relevant to Kradle)
 
 1. Locate the problem on the public test server & make an easily reproducible environment (you can also use local packets replay server or your custom server setup). Dm me for details on public test server / replay server
 2. Debug the code, find an issue in the code, isolate the problem
