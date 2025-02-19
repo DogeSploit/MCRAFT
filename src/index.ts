@@ -111,6 +111,9 @@ import { states } from 'minecraft-protocol'
 import { initMotionTracking } from './react/uiMotion'
 import { UserError } from './mineflayer/userError'
 import ping from './mineflayer/plugins/ping'
+import { LocalServer } from './customServer'
+import { startLocalReplayServer } from './replayPackets'
+import { localRelayServerPlugin } from './mineflayer/plugins/localRelay'
 
 window.debug = debug
 window.THREE = THREE
@@ -392,6 +395,7 @@ export async function connect (connectOptions: ConnectOptions) {
   const renderDistance = singleplayer ? renderDistanceSingleplayer : multiplayerRenderDistance
   let updateDataAfterJoin = () => { }
   let localServer
+  let localReplaySession: ReturnType<typeof startLocalReplayServer> | undefined
   try {
     const serverOptions = defaultsDeep({}, connectOptions.serverOverrides ?? {}, options.localServerOptions, defaultServerOptions)
     Object.assign(serverOptions, connectOptions.serverOverridesFlat ?? {})
@@ -430,6 +434,16 @@ export async function connect (connectOptions: ConnectOptions) {
     }
 
     let finalVersion = connectOptions.botVersion || (singleplayer ? serverOptions.version : undefined)
+
+    if (connectOptions.worldStateFileContents) {
+      try {
+        localReplaySession = startLocalReplayServer(connectOptions.worldStateFileContents)
+      } catch (err) {
+        console.error(err)
+        throw new UserError(`Failed to start local replay server: ${err}`)
+      }
+      finalVersion = localReplaySession.version
+    }
 
     if (singleplayer) {
       // SINGLEPLAYER EXPLAINER:
@@ -538,11 +552,15 @@ export async function connect (connectOptions: ConnectOptions) {
       ...clientDataStream ? {
         stream: clientDataStream as any,
       } : {},
-      ...singleplayer || p2pMultiplayer ? {
+      ...singleplayer || p2pMultiplayer || localReplaySession ? {
         keepAlive: false,
       } : {},
       ...singleplayer ? {
         version: serverOptions.version,
+        connect () { },
+        Client: CustomChannelClient as any,
+      } : {},
+      ...localReplaySession ? {
         connect () { },
         Client: CustomChannelClient as any,
       } : {},
@@ -608,7 +626,7 @@ export async function connect (connectOptions: ConnectOptions) {
       void handleCustomChannel()
     }
     customEvents.emit('mineflayerBotCreated')
-    if (singleplayer || p2pMultiplayer) {
+    if (singleplayer || p2pMultiplayer || localReplaySession) {
       // in case of p2pMultiplayer there is still flying-squid on the host side
       const _supportFeature = bot.supportFeature
       bot.supportFeature = ((feature) => {
@@ -664,6 +682,9 @@ export async function connect (connectOptions: ConnectOptions) {
 
   if (connectOptions.server) {
     bot.loadPlugin(ping)
+  }
+  if (!localReplaySession) {
+    bot.loadPlugin(localRelayServerPlugin)
   }
   if (!bot) return
 
