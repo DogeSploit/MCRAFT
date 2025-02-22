@@ -54,7 +54,7 @@ async function handleDroppedFile (file: File) {
     alert('Rar files are not supported yet!')
     return
   }
-  if (file.name.endsWith('.worldstate') || (file.name.startsWith('packets-replay') && file.name.endsWith('.txt'))) {
+  if (file.name.endsWith('.worldstate') || file.name.endsWith('.worldstate.txt') || (file.name.startsWith('packets-replay') && file.name.endsWith('.txt'))) {
     const worldStateFileContents = await file.text()
     const connectOptions: ConnectOptions = {
       worldStateFileContents,
