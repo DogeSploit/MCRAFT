@@ -52,7 +52,7 @@ function getThirdPersonCameraPosition () {
   const targetPosition = following.entity.position
   
   // Calculate camera position 5 blocks behind and 2 block above target
-  const yaw = following.entity.yaw
+  const { yaw } = following.entity
   const distance = 5
   const heightOffset = 2
   
@@ -75,21 +75,21 @@ export function setThirdPersonCamera (directionOnly = false) {
   // TODO: we can also be smarter about the camera to avoid obstacles coming in between.
   // and also handling special situations like water, lava, ladders, etc.
 
-  console.log("Updating camera position")
+  console.log('Updating camera position')
 
   // if the following entity is not loaded yet, use the bot's entity here
   const entity = following.entity || bot.entity
 
   // if the bot itself is being followed, just use first person camera normally
   if (entity === bot.entity) {
-    viewer.setFirstPersonCamera(!directionOnly ? following.entity.position : null, following.entity.yaw, following.entity.pitch)
-    return;
+    viewer.setFirstPersonCamera(directionOnly ? null : following.entity.position, following.entity.yaw, following.entity.pitch)
+    return
   }
 
   const { position, yaw, pitch } = getThirdPersonCameraPosition()
 
 
-  viewer.setFirstPersonCamera(!directionOnly ? position : null, yaw, pitch)
+  viewer.setFirstPersonCamera(directionOnly ? null : position, yaw, pitch)
 }
 
 // Have the bot stay right behind the followed entity
@@ -99,22 +99,22 @@ function moveTowardsFollowedEntity () {
   // always remain in sight of the player.
 
   // ignore if we're following ourselves
-  if (bot === following) return;
+  if (bot === following) return
 
   // ignore if we can't see the entity
-  if (!following.entity) return;
+  if (!following.entity) return
 
-  const {position: targetPosition} = getThirdPersonCameraPosition()
+  const { position: targetPosition } = getThirdPersonCameraPosition()
 
   // Don't move if we're near the target position
   const distance = bot.entity.position.distanceTo(targetPosition)
-  if (distance <= 3) return;
+  if (distance <= 3) return
 
   console.log(`Moving towards target position: ${distance} blocks away (${targetPosition})`)
   // move towards the target position...
-  bot.creative.flyTo(targetPosition);
+  void bot.creative.flyTo(targetPosition);
   // ...and look at the entity
-  bot.lookAt(following.entity.position)
+  void bot.lookAt(following.entity.position)
 }
 
 export function trackFollowerMovement () {
