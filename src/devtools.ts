@@ -20,17 +20,17 @@ window.inspectPlayer = () => require('fs').promises.readFile('/world/playerdata/
 
 Object.defineProperty(window, 'debugSceneChunks', {
   get () {
-    return (viewer.world as WorldRendererThree).getLoadedChunksRelative?.(bot.entity.position, true)
+    return (viewer.world as WorldRendererThree).getLoadedChunksRelative?.(following.entity.position, true)
   },
 })
 
 window.chunkKey = (xRel = 0, zRel = 0) => {
-  const pos = bot.entity.position
+  const pos = following.entity.position
   return `${(Math.floor(pos.x / 16) + xRel) * 16},${(Math.floor(pos.z / 16) + zRel) * 16}`
 }
 
 window.sectionKey = (xRel = 0, yRel = 0, zRel = 0) => {
-  const pos = bot.entity.position
+  const pos = following.entity.position
   return `${(Math.floor(pos.x / 16) + xRel) * 16},${(Math.floor(pos.y / 16) + yRel) * 16},${(Math.floor(pos.z / 16) + zRel) * 16}`
 }
 

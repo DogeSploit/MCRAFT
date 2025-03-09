@@ -327,7 +327,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     // this.rerenderAllChunks()
 
     // supply new data
-    await worldView!.updatePosition(bot.entity.position, true)
+    await worldView!.updatePosition(following.entity.position, true)
   }
 
   rerenderAllChunks () { // todo not clear what to do with loading chunks

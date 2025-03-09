@@ -110,7 +110,7 @@ customEvents.on('gameLoaded', () => {
     if (!mesh) return
     if (!mesh.playerObject || !options.loadPlayerSkins) return
     const MAX_DISTANCE_SKIN_LOAD = 128
-    const distance = e.position.distanceTo(bot.entity.position)
+    const distance = e.position.distanceTo(following.entity.position)
     if (distance < MAX_DISTANCE_SKIN_LOAD && distance < (bot.settings.viewDistance as number) * 16) {
       if (viewer.entities.entities[e.id]) {
         if (loadedSkinEntityIds.has(e.id)) return

@@ -43,7 +43,7 @@ export function onCameraMove (e: MouseEvent | CameraMoveEvent) {
 }
 
 
-export const moveCameraRawHandler = ({ x, y }: { x: number; y: number }) => {
+const moveCameraRawHandler = ({ x, y }: { x: number; y: number }) => {
   const maxPitch = 0.5 * Math.PI
   const minPitch = -0.5 * Math.PI
 
@@ -80,7 +80,8 @@ function pointerLockChangeCallback () {
   }
   if (viewer.renderer.xr.isPresenting) return // todo
   if (!pointerLock.hasPointerLock && activeModalStack.length === 0 && miscUiState.gameLoaded) {
-    showModal({ reactType: 'pause-screen' })
+    // @pranaygp - disabled pause screen to support auto follow
+    // showModal({ reactType: 'pause-screen' })
   }
 }
 

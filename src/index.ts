@@ -110,6 +110,7 @@ import { playerState, PlayerStateManager } from './mineflayer/playerState'
 import { states } from 'minecraft-protocol'
 import { initMotionTracking } from './react/uiMotion'
 import { UserError } from './mineflayer/userError'
+import { setThirdPersonCamera, trackFollowerMovement } from './follow'
 
 window.debug = debug
 window.THREE = THREE
@@ -118,6 +119,45 @@ window.beforeRenderFrame = []
 
 // ACTUAL CODE
 
+// Handle incoming messages from kradle frontend
+window.addEventListener('message', (event) => {
+  const data = event.data
+  if (data.source === 'kradle-frontend') {
+    console.log('[iframe-rpc] [minecraft-web-client] Received message', data)
+    customEvents.emit(`kradle:${data.action as 'followPlayer'}`, data)
+  }
+})
+
+// Handle outgoing messages to kradle frontend
+type IFrameSendablePayload = {
+  source: 'minecraft-web-client'; // Used to filter messages on the parent side
+  action: 'gameLoaded'; // indicates the action to perform
+} | {
+  source: 'minecraft-web-client';
+  action: 'followingPlayer';
+  username?: string;
+};
+function sendMessageToKradle(payload: Omit<IFrameSendablePayload, 'source'>) {
+  if (window !== window.parent) {
+    console.log('[iframe-rpc] [minecraft-web-client] Posting message', payload);
+    window.parent.postMessage({
+      ...payload,
+      source: 'minecraft-web-client'
+    }, '*')
+  }
+}
+customEvents.on('gameLoaded', () => {
+  sendMessageToKradle({
+    action: 'gameLoaded'
+  })
+})
+customEvents.on('followingPlayer', (username) => {
+  sendMessageToKradle({
+    action: 'followingPlayer',
+    // @ts-expect-error TODO fix this type
+    username
+  })
+})
 void registerServiceWorker().then(() => {
   mainMenuState.serviceWorkerLoaded = true
 })
@@ -331,6 +371,7 @@ export async function connect (connectOptions: ConnectOptions) {
       bot._client = undefined
       //@ts-expect-error
       window.bot = bot = undefined
+      window.following = undefined
     }
     resetStateAfterDisconnect()
     cleanFs()
@@ -603,6 +644,7 @@ export async function connect (connectOptions: ConnectOptions) {
       // "mapDownloader-saveInternal": false, // do not save into memory, todo must be implemeneted as we do really care of ram
     }) as unknown as typeof __type_bot
     window.bot = bot
+    window.following = bot
     if (connectOptions.viewerWsConnect) {
       void handleCustomChannel()
     }
@@ -770,9 +812,9 @@ export async function connect (connectOptions: ConnectOptions) {
       bot.chat(`/login ${connectOptions.autoLoginPassword}`)
     }
 
-    console.log('bot spawned - starting viewer')
+    console.log('bot spawned - starting viewer', following, bot)
 
-    const center = bot.entity.position
+    const center = following.entity.position
 
     const worldView = window.worldView = new WorldDataEmitter(bot.world, renderDistance, center)
     watchOptionsAfterWorldViewInit()
@@ -783,25 +825,17 @@ export async function connect (connectOptions: ConnectOptions) {
     initMotionTracking()
 
     renderWrapper.postRender = () => {
-      viewer.setFirstPersonCamera(null, bot.entity.yaw, bot.entity.pitch)
+      setThirdPersonCamera(true)
     }
 
     // Link WorldDataEmitter and Viewer
     viewer.connect(worldView)
     worldView.listenToBot(bot)
-    void worldView.init(bot.entity.position)
+    // worldView.listenToBot(entity) // should we be using this?
+    void worldView.init(following.entity.position)
 
     dayCycle()
-
-    // Bot position callback
-    function botPosition () {
-      viewer.world.lastCamUpdate = Date.now()
-      // this might cause lag, but not sure
-      viewer.setFirstPersonCamera(bot.entity.position, bot.entity.yaw, bot.entity.pitch)
-      void worldView.updatePosition(bot.entity.position)
-    }
-    bot.on('move', botPosition)
-    botPosition()
+    trackFollowerMovement()
 
     setLoadingScreenStatus('Setting callbacks')
 
