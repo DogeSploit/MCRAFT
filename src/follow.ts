@@ -68,17 +68,19 @@ export function setThirdPersonCamera (directionOnly = false) {
   viewer.setFirstPersonCamera(directionOnly ? null : position, yaw, pitch)
 }
 
-// Have the bot stay right behind the followed entity
-// so it's always in sight, and control can be switched back to the bot easily
+// Have the bot stay close behind the followed entity
+// so it's always in sight (needed for rendering), and so control can be
+// switched back to the bot seamlessly
 let lastMoveTime = 0
 function moveTowardsFollowedEntity () {
+  // TODO: use teleporting instead of flying. To do this without op priviliges
+  // it will require a datapack to create a custom trigger that can be executed
+  // by KradleWebViewer.
+
   // Throttle to twice per second (500ms)
   const now = Date.now()
   if (now - lastMoveTime < 500) return
   lastMoveTime = now
-
-  // We want the bot to stay close to the followed entity so we
-  // always remain in sight of the player.
 
   // ignore if we're following ourselves
   if (bot === following) return
@@ -118,7 +120,7 @@ export function setFollowingPlayer (username?: string) {
   if (!username) {
     // stop following
     window.following = bot
-    controMax.enabled = true
+    controMax.enabled = true // enable keyboard control of bot
     customEvents.emit('followingPlayer', undefined)
     console.log(`Following self (main bot)`)
     return
@@ -126,7 +128,7 @@ export function setFollowingPlayer (username?: string) {
 
   // start following player
   window.following = bot.players[username]
-  controMax.enabled = false
+  controMax.enabled = false // disable keyboard control of bot
   customEvents.emit('followingPlayer', username)
   console.log(`Following player '${username}'`)
 }
