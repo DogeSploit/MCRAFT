@@ -129,6 +129,7 @@ const registerMediaChannels = () => {
       { name: '_volume', type: 'f32' }, // 0
       { name: '_aspectRatioMode', type: 'u8' }, // 0
       { name: '_background', type: 'u8' }, // 0
+      { name: '_opacity', type: 'u8' }, // 1
       { name: '_cropXStart', type: 'f32' }, // 0
       { name: '_cropYStart', type: 'f32' }, // 0
       { name: '_cropXEnd', type: 'f32' }, // 0
@@ -244,7 +245,7 @@ const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1) => {
     side: 'towards',
     src: 'video1.mp4',
     rotation,
-    doubleSide: false
+    doubleSide: true
   })
 }
 window.addTestVideo = addTestVideo

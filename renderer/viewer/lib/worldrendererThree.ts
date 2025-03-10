@@ -39,7 +39,7 @@ export class WorldRendererThree extends WorldRendererCommon {
   holdingBlockLeft: HoldingBlock
   rendererDevice = '...'
   customVideos = new Map<string, {
-    mesh: THREE.Mesh
+    mesh: THREE.Object3D
     video: HTMLVideoElement
     texture: THREE.VideoTexture
     updateUVMapping: (config: { startU: number, endU: number, startV: number, endV: number }) => void
@@ -474,15 +474,29 @@ export class WorldRendererThree extends WorldRendererCommon {
     }
   }
 
-  private calculateVideoPosition (position: { x: number, y: number, z: number }, side: 'towards' | 'away'): { x: number, y: number, z: number } {
+  private calculateVideoPosition (position: { x: number, y: number, z: number }, side: 'towards' | 'away', rotation?: 0 | 1 | 2 | 3): { x: number, y: number, z: number } {
     const offset = side === 'towards' ? 0.999 : 0.001
     // Position is bottom-left corner, so we need to add half the size to center it
     // Only apply towards/away offset to Z-axis, normalize X/Y with 0.5
-    return {
-      x: Math.floor(position.x) + 0.5,
-      y: Math.floor(position.y) + 0.5,
-      z: Math.floor(position.z) + (side === 'towards' ? 1 : 0) - offset
+    const baseX = Math.floor(position.x) + 0.5
+    const baseY = Math.floor(position.y) + 0.5
+    const baseZ = Math.floor(position.z) + (side === 'towards' ? 1 : 0) - offset
+
+    // Adjust position based on rotation to maintain correct starting point
+    if (rotation !== undefined) {
+      switch (rotation) {
+        case 1: // 90 degrees
+          return { x: baseX + 0.5, y: baseY, z: baseZ }
+        case 2: // 180 degrees
+          return { x: baseX + 0.5, y: baseY, z: baseZ - 0.5 }
+        case 3: // 270 degrees
+          return { x: baseX, y: baseY, z: baseZ - 0.5 }
+        default: // 0 degrees
+          return { x: baseX, y: baseY, z: baseZ }
+      }
     }
+
+    return { x: baseX, y: baseY, z: baseZ }
   }
 
   addVideo (id: string, props: VideoProperties) {
@@ -508,23 +522,31 @@ export class WorldRendererThree extends WorldRendererCommon {
       side: props.doubleSide ? THREE.DoubleSide : THREE.FrontSide
     })
 
-    // Create mesh
+    // Create inner mesh for offsets
     const mesh = new THREE.Mesh(geometry, material)
 
-    // Calculate final position with offset
-    const finalPosition = this.calculateVideoPosition(props.position, props.side)
-    mesh.position.set(finalPosition.x, finalPosition.y, finalPosition.z)
+    // Create outer group for position and rotation
+    const group = new THREE.Group()
+    group.add(mesh)
+
+    // Calculate base position (center of block)
+    const baseX = Math.floor(props.position.x) + 0.5
+    const baseY = Math.floor(props.position.y) + 0.5
+    const baseZ = Math.floor(props.position.z) + (props.side === 'towards' ? 1 : 0) - (props.side === 'towards' ? 0.999 : 0.001)
+
+    // Set group position to block center
+    group.position.set(baseX, baseY, baseZ)
 
     // Set rotation if provided (0-3 for 0°, 90°, 180°, 270°)
     if (props.rotation !== undefined) {
-      mesh.rotation.y = (props.rotation * Math.PI) / 2
+      group.rotation.y = (props.rotation * Math.PI) / 2
     }
 
     // Set fixed scale based on provided size
     mesh.scale.set(props.size.width, props.size.height, 1)
 
     // Add to scene
-    this.scene.add(mesh)
+    this.scene.add(group)
 
     // Start playing the video
     video.play().catch(console.error)
@@ -559,7 +581,7 @@ export class WorldRendererThree extends WorldRendererCommon {
 
     // Store video data
     this.customVideos.set(id, {
-      mesh,
+      mesh: group, // Store the group instead of just the mesh
       video,
       texture: videoTexture,
       updateUVMapping
@@ -593,10 +615,16 @@ export class WorldRendererThree extends WorldRendererCommon {
       videoData.video.src = ''
       this.scene.remove(videoData.mesh)
       videoData.texture.dispose()
-      videoData.mesh.geometry.dispose()
-      if (videoData.mesh.material instanceof THREE.Material) {
-        videoData.mesh.material.dispose()
+
+      // Get the inner mesh from the group
+      const mesh = videoData.mesh.children[0] as THREE.Mesh
+      if (mesh) {
+        mesh.geometry.dispose()
+        if (mesh.material instanceof THREE.Material) {
+          mesh.material.dispose()
+        }
       }
+
       this.customVideos.delete(id)
     }
   }
