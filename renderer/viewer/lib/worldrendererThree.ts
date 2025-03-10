@@ -506,6 +506,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     video.loop = true
     video.muted = true
     video.playsInline = true
+    video.crossOrigin = 'anonymous'
 
     // Create video texture
     const videoTexture = new THREE.VideoTexture(video)
