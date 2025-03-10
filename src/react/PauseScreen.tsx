@@ -114,7 +114,7 @@ export const saveToBrowserMemory = async () => {
     const zMin = Math.min(...regionFilesNumbers.flatMap(x => x[1]))
     const xMax = Math.max(...regionFilesNumbers.flatMap(x => x[0]))
     const zMax = Math.max(...regionFilesNumbers.flatMap(x => x[1]))
-    const playerPosRegion = bot.entity.position.divide(new Vec3(32 * 16, 32 * 16, 32 * 16)).floored()
+    const playerPosRegion = following.entity.position.divide(new Vec3(32 * 16, 32 * 16, 32 * 16)).floored()
     const maxDistantRegion = Math.max(
       Math.abs(playerPosRegion.x - xMin),
       Math.abs(playerPosRegion.z - zMin),
@@ -158,7 +158,8 @@ export default () => {
 
   const handlePointerLockChange = () => {
     if (!pointerLock.hasPointerLock && activeModalStack.length === 0) {
-      showModal({ reactType: 'pause-screen' })
+      // @pranaygp disabled pause menu for auto follow
+      // showModal({ reactType: 'pause-screen' })
     }
   }
 

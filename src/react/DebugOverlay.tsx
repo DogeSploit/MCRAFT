@@ -99,10 +99,10 @@ export default () => {
     }, 1000)
 
     const freqUpdateInterval = setInterval(() => {
-      setPos({ ...bot.entity.position })
-      setSkyL(bot.world.getSkyLight(bot.entity.position))
-      setBlockL(bot.world.getBlockLight(bot.entity.position))
-      setBiomeId(bot.world.getBiome(bot.entity.position))
+      setPos({ ...following.entity.position })
+      setSkyL(bot.world.getSkyLight(following.entity.position))
+      setBlockL(bot.world.getBlockLight(following.entity.position))
+      setBiomeId(bot.world.getBiome(following.entity.position))
       setDimension(bot.game.dimension)
       setDay(bot.time.day)
       setCursorBlock(bot.blockAtCursor(5))
@@ -126,9 +126,9 @@ export default () => {
   }, [])
 
   useEffect(() => {
-    minecraftYaw.current = viewDegToMinecraft(bot.entity.yaw * -180 / Math.PI)
+    minecraftYaw.current = viewDegToMinecraft(following.entity.yaw * -180 / Math.PI)
     minecraftQuad.current = Math.floor(((minecraftYaw.current + 180) / 90 + 0.5) % 4)
-  }, [bot.entity.yaw])
+  }, [following.entity.yaw])
 
   if (!showDebug) return null
 
@@ -141,8 +141,8 @@ export default () => {
       <p>XYZ: {pos.x.toFixed(3)} / {pos.y.toFixed(3)} / {pos.z.toFixed(3)}</p>
       <p>Chunk: {Math.floor(pos.x % 16)} ~ {Math.floor(pos.z % 16)} in {Math.floor(pos.x / 16)} ~ {Math.floor(pos.z / 16)}</p>
       <p>Packets: {packetsString}</p>
-      <p>Facing (viewer): {bot.entity.yaw.toFixed(3)} {bot.entity.pitch.toFixed(3)}</p>
-      <p>Facing (minecraft): {quadsDescription[minecraftQuad.current]} ({minecraftYaw.current.toFixed(1)} {(bot.entity.pitch * -180 / Math.PI).toFixed(1)})</p>
+      <p>Facing (viewer): {following.entity.yaw.toFixed(3)} {following.entity.pitch.toFixed(3)}</p>
+      <p>Facing (minecraft): {quadsDescription[minecraftQuad.current]} ({minecraftYaw.current.toFixed(1)} {(following.entity.pitch * -180 / Math.PI).toFixed(1)})</p>
       <p>Light: {blockL} ({skyL} sky)</p>
 
       <p>Biome: minecraft:{loadedData.biomesArray[biomeId]?.name ?? 'unknown biome'}</p>

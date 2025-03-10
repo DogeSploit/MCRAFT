@@ -8,6 +8,7 @@ import { subscribe } from 'valtio'
 import { activeModalStack, hideModal } from './globalState'
 import { watchUnloadForCleanup } from './gameUnload'
 import { options } from './optionsStorage'
+import { setThirdPersonCamera } from './follow'
 
 export async function initVR () {
   options.vrSupport = true
@@ -192,7 +193,7 @@ export async function initVR () {
     }
 
     // viewer.setFirstPersonCamera(null, yawOffset, 0)
-    viewer.setFirstPersonCamera(null, bot.entity.yaw, bot.entity.pitch)
+    setThirdPersonCamera(true)
 
     // todo restore this logic (need to preserve ability to move camera)
     // const xrCamera = renderer.xr.getCamera()

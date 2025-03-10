@@ -518,7 +518,8 @@ contro.on('trigger', ({ command }) => {
   }
 
   if (command === 'ui.pauseMenu') {
-    showModal({ reactType: 'pause-screen' })
+    // @pranaygp disabled pause menu for auto follow
+    // showModal({ reactType: 'pause-screen' })
   }
 
   if (command === 'ui.toggleFullscreen') {

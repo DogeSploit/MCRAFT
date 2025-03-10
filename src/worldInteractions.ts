@@ -521,6 +521,11 @@ function isLookingAtActivatableBlock (block: Block) {
 }
 
 export const getEntityCursor = () => {
+  // If we're following an entity, entity cursor should be null
+  // since we are not interacting with any other entities
+  if (bot !== following) {
+    return null
+  }
   const entity = bot.nearestEntity((e) => {
     if (e.position.distanceTo(bot.entity.position) <= (bot.game.gameMode === 'creative' ? 5 : 3)) {
       const dir = getViewDirection(bot.entity.pitch, bot.entity.yaw)

@@ -110,6 +110,8 @@ import { playerState, PlayerStateManager } from './mineflayer/playerState'
 import { states } from 'minecraft-protocol'
 import { initMotionTracking } from './react/uiMotion'
 import { UserError } from './mineflayer/userError'
+import { setupIframeComms } from './iframe'
+import { setThirdPersonCamera, trackFollowerMovement } from './follow'
 
 window.debug = debug
 window.THREE = THREE
@@ -118,6 +120,7 @@ window.beforeRenderFrame = []
 
 // ACTUAL CODE
 
+setupIframeComms()
 void registerServiceWorker().then(() => {
   mainMenuState.serviceWorkerLoaded = true
 })
@@ -331,6 +334,7 @@ export async function connect (connectOptions: ConnectOptions) {
       bot._client = undefined
       //@ts-expect-error
       window.bot = bot = undefined
+      window.following = undefined
     }
     resetStateAfterDisconnect()
     cleanFs()
@@ -603,6 +607,7 @@ export async function connect (connectOptions: ConnectOptions) {
       // "mapDownloader-saveInternal": false, // do not save into memory, todo must be implemeneted as we do really care of ram
     }) as unknown as typeof __type_bot
     window.bot = bot
+    window.following = bot
     if (connectOptions.viewerWsConnect) {
       void handleCustomChannel()
     }
@@ -772,7 +777,7 @@ export async function connect (connectOptions: ConnectOptions) {
 
     console.log('bot spawned - starting viewer')
 
-    const center = bot.entity.position
+    const center = following.entity.position
 
     const worldView = window.worldView = new WorldDataEmitter(bot.world, renderDistance, center)
     watchOptionsAfterWorldViewInit()
@@ -783,25 +788,16 @@ export async function connect (connectOptions: ConnectOptions) {
     initMotionTracking()
 
     renderWrapper.postRender = () => {
-      viewer.setFirstPersonCamera(null, bot.entity.yaw, bot.entity.pitch)
+      setThirdPersonCamera(true)
     }
 
     // Link WorldDataEmitter and Viewer
     viewer.connect(worldView)
-    worldView.listenToBot(bot)
-    void worldView.init(bot.entity.position)
+    worldView.listenToBot(bot) // should we be using this when following?
+    void worldView.init(following.entity.position)
 
     dayCycle()
-
-    // Bot position callback
-    function botPosition () {
-      viewer.world.lastCamUpdate = Date.now()
-      // this might cause lag, but not sure
-      viewer.setFirstPersonCamera(bot.entity.position, bot.entity.yaw, bot.entity.pitch)
-      void worldView.updatePosition(bot.entity.position)
-    }
-    bot.on('move', botPosition)
-    botPosition()
+    trackFollowerMovement()
 
     setLoadingScreenStatus('Setting callbacks')
 

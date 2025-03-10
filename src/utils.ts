@@ -149,7 +149,7 @@ export const setRenderDistance = () => {
 export const reloadChunks = async () => {
   if (!worldView) return
   setRenderDistance()
-  await worldView.updatePosition(bot.entity.position, true)
+  await worldView.updatePosition(following.position, true)
 }
 
 export const openGithub = (addUrl = '') => {

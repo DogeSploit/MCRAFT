@@ -14,24 +14,24 @@ let lastYaw = 0
 let lastPitch = 0
 
 export function updateMotion () {
-  if (!bot?.entity) return
+  if (!following?.entity) return
   const now = performance.now()
   const deltaTime = (now - lastUpdate) / 1000 // Convert to seconds
   lastUpdate = now
 
   // Get camera movement contribution
-  const yawDiff = (bot.entity.yaw - lastYaw)
-  const pitchDiff = (bot.entity.pitch - lastPitch)
-  lastYaw = bot.entity.yaw
-  lastPitch = bot.entity.pitch
+  const yawDiff = (following.entity.yaw - lastYaw)
+  const pitchDiff = (following.entity.pitch - lastPitch)
+  lastYaw = following.entity.yaw
+  lastPitch = following.entity.pitch
 
   // Create a vector for velocity in world space
-  const { velocity } = bot.entity
+  const { velocity } = following.entity
   const velocityVector = new THREE.Vector3(velocity.x, 0, velocity.z)
 
   // Get camera's forward direction
   const cameraQuat = new THREE.Quaternion()
-  cameraQuat.setFromEuler(new THREE.Euler(0, -bot.entity.yaw, 0))
+  cameraQuat.setFromEuler(new THREE.Euler(0, -following.entity.yaw, 0))
 
   // Transform velocity to camera space
   velocityVector.applyQuaternion(cameraQuat)

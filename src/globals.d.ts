@@ -11,6 +11,8 @@ declare const bot: Omit<import('mineflayer').Bot, 'world' | '_client'> & {
   }
 }
 declare const __type_bot: typeof bot
+declare const following: __type_bot | Player
+declare const controMax: ControMax
 declare const viewer: import('renderer/viewer/lib/viewer').Viewer
 declare const worldView: import('renderer/viewer/lib/worldDataEmitter').WorldDataEmitter | undefined
 declare const addStatPerSec: (name: string) => void
@@ -27,6 +29,8 @@ declare const customEvents: import('typed-emitter').default<{
   search (q: string): void
   activateItem (item: Item, slot: number, offhand: boolean): void
   hurtAnimation (): void
+  'kradle:followPlayer' (data: any): void // request from kradle to follow a player
+  'followingPlayer' (username?: string): void // when following has begun
 }>
 declare const beforeRenderFrame: Array<() => void>
 
