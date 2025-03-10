@@ -113,7 +113,10 @@ export function trackFollowerMovement () {
   bot.on('entityUpdate', () => handleMovement())
 
   // Keep the bot close to the followed entity
-  bot.on('entityMoved', () => moveTowardsFollowedEntity())
+  // TODO: we need to enable this to ensure the player stays in render distance, however
+  // it currently makes it impossible to return control to bot since we can't
+  // cancel any active `flyTo` calls.
+  // bot.on('entityMoved', () => moveTowardsFollowedEntity())
 }
 
 export function setFollowingPlayer (username?: string) {
