@@ -523,15 +523,15 @@ function isLookingAtActivatableBlock (block: Block) {
 export const getEntityCursor = () => {
   // If we're following an entity, entity cursor should be null
   // since we are not interacting with any other entities
-  if (bot !== following && following.entity) {
+  if (bot !== following) {
     return null
   }
   const entity = bot.nearestEntity((e) => {
-    if (e.position.distanceTo(following.entity.position) <= (bot.game.gameMode === 'creative' ? 5 : 3)) {
-      const dir = getViewDirection(following.entity.pitch, following.entity.yaw)
+    if (e.position.distanceTo(bot.entity.position) <= (bot.game.gameMode === 'creative' ? 5 : 3)) {
+      const dir = getViewDirection(bot.entity.pitch, bot.entity.yaw)
       const { width, height } = e
       const { x: eX, y: eY, z: eZ } = e.position
-      const { x: bX, y: bY, z: bZ } = following.entity.position
+      const { x: bX, y: bY, z: bZ } = bot.entity.position
       const box = new THREE.Box3(
         new THREE.Vector3(eX - width / 2, eY, eZ - width / 2),
         new THREE.Vector3(eX + width / 2, eY + height, eZ + width / 2)

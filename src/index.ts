@@ -775,7 +775,7 @@ export async function connect (connectOptions: ConnectOptions) {
       bot.chat(`/login ${connectOptions.autoLoginPassword}`)
     }
 
-    console.log('bot spawned - starting viewer', following, bot)
+    console.log('bot spawned - starting viewer')
 
     const center = following.entity.position
 
@@ -793,8 +793,7 @@ export async function connect (connectOptions: ConnectOptions) {
 
     // Link WorldDataEmitter and Viewer
     viewer.connect(worldView)
-    worldView.listenToBot(bot)
-    // worldView.listenToBot(entity) // should we be using this?
+    worldView.listenToBot(bot) // should we be using this when following?
     void worldView.init(following.entity.position)
 
     dayCycle()
