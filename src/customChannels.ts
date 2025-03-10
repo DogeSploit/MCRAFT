@@ -243,18 +243,9 @@ const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1) => {
       height: scale
     },
     side: 'towards',
-    src: 'video1.mp4',
+    src: 'https://threejs.org/examples/textures/sintel.mp4',
     rotation,
     doubleSide: true
   })
 }
 window.addTestVideo = addTestVideo
-
-
-// const registerMediaOpenChannel = () => {
-//   const CHANNEL_NAME = 'minecraft-web-client:media-open'
-//   const packetStructure = [
-//     'container',
-//     [
-//       {
-//         name: 'id',
