@@ -68,39 +68,6 @@ export function setThirdPersonCamera (directionOnly = false) {
   viewer.setFirstPersonCamera(directionOnly ? null : position, yaw, pitch)
 }
 
-// Have the bot stay close behind the followed entity
-// so it's always in sight (needed for rendering), and so control can be
-// switched back to the bot seamlessly
-let lastMoveTime = 0
-function moveTowardsFollowedEntity () {
-  // TODO: use teleporting instead of flying. To do this without op priviliges
-  // it will require a datapack to create a custom trigger that can be executed
-  // by KradleWebViewer.
-
-  // Throttle to twice per second (500ms)
-  const now = Date.now()
-  if (now - lastMoveTime < 500) return
-  lastMoveTime = now
-
-  // ignore if we're following ourselves
-  if (bot === following) return
-
-  // ignore if we can't see the entity
-  if (!following.entity) return
-
-  const { position: targetPosition } = getThirdPersonCameraPosition()
-
-  // Don't move if we're near the target position
-  const distance = bot.entity.position.distanceTo(targetPosition)
-  if (distance <= 3) return
-
-  console.log(`Moving towards target position: ${distance} blocks away (${targetPosition})`)
-  // move towards the target position...
-  void bot.creative.flyTo(targetPosition)
-  // ...and look at the entity
-  void bot.lookAt(following.entity.position)
-}
-
 export function trackFollowerMovement () {
   bot.on('move', () => handleMovement())
 
@@ -111,29 +78,29 @@ export function trackFollowerMovement () {
   bot.on('entityGone', () => handleMovement())
   bot.on('entityMoved', () => handleMovement())
   bot.on('entityUpdate', () => handleMovement())
-
-  // Keep the bot close to the followed entity
-  // TODO: we need to enable this to ensure the player stays in render distance, however
-  // it currently makes it impossible to return control to bot since we can't
-  // cancel any active `flyTo` calls.
-  // bot.on('entityMoved', () => moveTowardsFollowedEntity())
 }
 
 export function setFollowingPlayer (username?: string) {
   if (!username) {
     // stop following
+    console.log(`Following self (main bot)`)
     window.following = bot
     controMax.enabled = true // enable keyboard control of bot
     customEvents.emit('followingPlayer', undefined)
-    console.log(`Following self (main bot)`)
+
+    // tell the watcher to stop following and move to the current camera position
+    const { position } = getThirdPersonCameraPosition()
+    bot.whisper('watcher', `unfollow ${position.x} ${position.y} ${position.z}`)
     return
   }
 
   // start following player
+  console.log(`Following player '${username}'`)
+
   window.following = bot.players[username]
   controMax.enabled = false // disable keyboard control of bot
   customEvents.emit('followingPlayer', username)
-  console.log(`Following player '${username}'`)
+  bot.whisper('watcher', `follow ${username}`) // tell the watcher to keep us following the player
 }
 
 // Handle Kradle Custom Events
@@ -151,7 +118,7 @@ customEvents.on('kradle:followPlayer', async (data) => {
   // check if the player exists
   if (!bot.players[username]) {
     // Give it a second to see if it loads eventually
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await new Promise(resolve => { setTimeout(resolve, 1000) })
     if (!bot.players[username]) {
       // It still hasn't loaded, give up on following
       console.error(`Failed to follow player '${username}' in the game (not found)`)
@@ -167,7 +134,7 @@ customEvents.on('kradle:followPlayer', async (data) => {
   // we need to fix this so it works no matter where the player is located. maybe teleport the bot to the player?
   if (!bot.players[username].entity) {
     // Give it a second to see if it loads eventually
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    await new Promise(resolve => { setTimeout(resolve, 1000) })
     if (!bot.players[username].entity) {
       // It still hasn't loaded, give up on following
       console.error(`'${username}' found but it's position could not be determined`)

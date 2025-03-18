@@ -34,6 +34,7 @@ const controlOptions = {
   preventDefault: true
 }
 
+const isDev = process.env.NODE_ENV === 'development'
 export const contro = new ControMax({
   commands: {
     general: {
@@ -47,8 +48,9 @@ export const contro = new ControMax({
       prevHotbarSlot: [null],
       attackDestroy: [null],
       interactPlace: [null],
-      chat: [null],
-      command: [null],
+      // disable chat and commands in prod
+      chat: isDev ? ['Enter'] : [null],
+      command: isDev ? ['Slash'] : [null],
       swapHands: [null],
       zoom: [null],
       selectItem: [null], // default will be removed

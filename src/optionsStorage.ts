@@ -22,7 +22,7 @@ const defaultOptions = {
   chatWidth: 320,
   chatHeight: 90,
   chatScale: 60,
-  chatOpacity: 0,
+  chatOpacity: isDev ? 50 : 0, // show chat in dev
   chatOpacityOpened: 100,
   messagesLimit: 200,
   volume: 30,
