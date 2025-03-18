@@ -16,16 +16,16 @@ import { IPlayerState } from './basePlayerState'
 import { getMesh } from './entity/EntityMesh'
 import { armorModel } from './entity/armorModels'
 
-interface VideoProperties {
+interface MediaProperties {
   position: { x: number, y: number, z: number }
   size: { width: number, height: number }
-  side: 'towards' | 'away'
   src: string
   rotation?: 0 | 1 | 2 | 3 // 0-3 for 0°, 90°, 180°, 270°
   doubleSide?: boolean
   background?: number // Hexadecimal color (e.g., 0x000000 for black)
   opacity?: number // 0-1 value for transparency
   uvMapping?: { startU: number, endU: number, startV: number, endV: number }
+  allowOrigins?: string[] | boolean
 }
 
 export class WorldRendererThree extends WorldRendererCommon {
@@ -40,10 +40,10 @@ export class WorldRendererThree extends WorldRendererCommon {
   holdingBlock: HoldingBlock
   holdingBlockLeft: HoldingBlock
   rendererDevice = '...'
-  customVideos = new Map<string, {
+  customMedia = new Map<string, {
     mesh: THREE.Object3D
-    video: HTMLVideoElement
-    texture: THREE.VideoTexture
+    video: HTMLVideoElement | undefined
+    texture: THREE.Texture
     updateUVMapping: (config: { startU: number, endU: number, startV: number, endV: number }) => void
   }>()
 
@@ -552,14 +552,33 @@ export class WorldRendererThree extends WorldRendererCommon {
     return texture
   }
 
-  addVideo (id: string, props: VideoProperties) {
-    // Create video element
-    const video = document.createElement('video')
-    video.src = props.src
-    video.loop = true
-    video.muted = true
-    video.playsInline = true
-    video.crossOrigin = 'anonymous'
+  validateOrigin (src: string, allowOrigins: string[] | boolean) {
+    if (allowOrigins === true) return true
+    if (allowOrigins === false) return false
+    const url = new URL(src)
+    return allowOrigins.some(origin => url.origin.endsWith(origin))
+  }
+
+  addMedia (id: string, props: MediaProperties) {
+    this.destroyMedia(id)
+
+    const originSecurityError = props.allowOrigins !== undefined && !this.validateOrigin(props.src, props.allowOrigins)
+    if (originSecurityError) {
+      console.warn('Remote resource blocked due to security policy', props.src, 'allowed origins:', props.allowOrigins, 'you can control it with `remoteContentNotSameOrigin` option')
+      props.src = ''
+    }
+
+    const isImage = props.src.endsWith('.png') || props.src.endsWith('.jpg') || props.src.endsWith('.jpeg')
+
+    let video: HTMLVideoElement | undefined
+    if (!isImage) {
+      video = document.createElement('video')
+      video.src = props.src
+      video.loop = true
+      video.muted = true
+      video.playsInline = true
+      video.crossOrigin = 'anonymous'
+    }
 
     // Create background texture first
     const backgroundTexture = this.createBackgroundTexture(
@@ -569,12 +588,11 @@ export class WorldRendererThree extends WorldRendererCommon {
       // props.opacity ?? 1
     )
 
-    // Create video texture
-    const videoTexture = new THREE.VideoTexture(video)
-    videoTexture.minFilter = THREE.NearestFilter
-    videoTexture.magFilter = THREE.NearestFilter
-    videoTexture.format = THREE.RGBAFormat
-    videoTexture.generateMipmaps = false
+    const handleError = () => {
+      const errorTexture = this.createErrorTexture(props.size.width, props.size.height, props.background)
+      material.map = errorTexture
+      material.needsUpdate = true
+    }
 
     // Create a plane geometry with configurable UV mapping
     const geometry = new THREE.PlaneGeometry(1, 1)
@@ -583,54 +601,45 @@ export class WorldRendererThree extends WorldRendererCommon {
     const material = new THREE.MeshBasicMaterial({
       map: backgroundTexture,
       transparent: true,
-      side: props.doubleSide ? THREE.DoubleSide : props.side === 'towards' ? THREE.BackSide : THREE.FrontSide,
+      side: props.doubleSide ? THREE.DoubleSide : THREE.FrontSide
     })
+
+    const texture = video
+      ? new THREE.VideoTexture(video)
+      : new THREE.TextureLoader().load(props.src, () => {
+        if (this.customMedia.get(id)?.texture === texture) {
+          material.map = texture
+          material.needsUpdate = true
+        }
+      }, undefined, handleError) // todo cache
+    texture.minFilter = THREE.NearestFilter
+    texture.magFilter = THREE.NearestFilter
+    texture.format = THREE.RGBAFormat
+    texture.generateMipmaps = false
 
     // Create inner mesh for offsets
     const mesh = new THREE.Mesh(geometry, material)
 
-    // Create outer group for position and rotation
-    const group = new THREE.Group()
-    group.add(mesh)
+    const { debugGroup } = this.positionMeshExact(mesh, THREE.MathUtils.degToRad((props.rotation ?? 0) * 90), props.position, props.size.width, props.size.height)
 
-    const baseX = Math.floor(props.position.x)
-    const baseY = Math.floor(props.position.y)
-    const baseZ = Math.floor(props.position.z)
+    this.scene.add(debugGroup)
 
-    // Set rotation if provided (0-3 for 0°, 90°, 180°, 270°)
-    if (props.rotation !== undefined) {
-      group.rotation.y = (props.rotation * Math.PI) / 2
-    }
+    if (video) {
+      // Start playing the video
+      video.play().catch(err => {
+        console.error('Failed to play video:', err)
+        handleError()
+      })
 
-    mesh.position.set(0, 0, (props.side === 'towards' ? 0.499 : -0.499))
-    mesh.scale.set(props.size.width, props.size.height, 1)
-    this.setPosition(group, { x: baseX, y: baseY, z: baseZ }, props.size.width, props.size.height, 1)
-    group.scale.set(1, 1, 1)
-
-    // Add to scene
-    this.scene.add(group)
-
-    // Handle video errors and loading
-    const handleError = () => {
-      const errorTexture = this.createErrorTexture(props.size.width, props.size.height, props.background)
-      material.map = errorTexture
-      material.needsUpdate = true
-    }
-
-    // Start playing the video
-    video.play().catch(err => {
-      console.error('Failed to play video:', err)
-      handleError()
-    })
-
-    // Update texture in animation loop
-    mesh.onBeforeRender = () => {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        if (material.map !== videoTexture) {
-          material.map = videoTexture
-          material.needsUpdate = true
+      // Update texture in animation loop
+      mesh.onBeforeRender = () => {
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          if (material.map !== texture) {
+            material.map = texture
+            material.needsUpdate = true
+          }
+          texture.needsUpdate = true
         }
-        videoTexture.needsUpdate = true
       }
     }
 
@@ -654,47 +663,19 @@ export class WorldRendererThree extends WorldRendererCommon {
     }
 
     // Store video data
-    this.customVideos.set(id, {
-      mesh: group,
+    this.customMedia.set(id, {
+      mesh: debugGroup,
       video,
-      texture: videoTexture,
+      texture,
       updateUVMapping
     })
 
     return id
   }
 
-  // eslint-disable-next-line max-params
-  setPosition (object: THREE.Object3D, startPosition: { x: number, y: number, z: number }, width: number, height: number, depth: number) {
-    object.position.set(startPosition.x + width / 2, startPosition.y + height / 2, startPosition.z + depth / 2)
-    object.scale.set(width, height, depth)
-  }
-
-  addTestMesh () {
-    const pos = window.cursorBlockRel().position
-    const group = new THREE.Group()
-
-    const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({
-        color: 0x00_ff_00,
-        side: THREE.DoubleSide
-      })
-    )
-    const width = 1
-    const height = 2
-    this.setPosition(plane, { x: 0, y: 0, z: 0 }, width, height, 1)
-    group.add(plane)
-    this.setPosition(group, pos, width, height, 1)
-    group.scale.set(1, 1, 1)
-    plane.rotation.y = THREE.MathUtils.degToRad(90)
-
-    viewer.scene.add(group)
-  }
-
   setVideoPlaying (id: string, playing: boolean) {
-    const videoData = this.customVideos.get(id)
-    if (videoData) {
+    const videoData = this.customMedia.get(id)
+    if (videoData?.video) {
       if (playing) {
         videoData.video.play().catch(console.error)
       } else {
@@ -704,36 +685,38 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   setVideoSeeking (id: string, seconds: number) {
-    const videoData = this.customVideos.get(id)
-    if (videoData) {
+    const videoData = this.customMedia.get(id)
+    if (videoData?.video) {
       videoData.video.currentTime = seconds
     }
   }
 
   setVideoVolume (id: string, volume: number) {
-    const videoData = this.customVideos.get(id)
-    if (videoData) {
+    const videoData = this.customMedia.get(id)
+    if (videoData?.video) {
       videoData.video.volume = volume
     }
   }
 
   setVideoSpeed (id: string, speed: number) {
-    const videoData = this.customVideos.get(id)
-    if (videoData) {
+    const videoData = this.customMedia.get(id)
+    if (videoData?.video) {
       videoData.video.playbackRate = speed
     }
   }
 
-  destroyVideo (id: string) {
-    const videoData = this.customVideos.get(id)
-    if (videoData) {
-      videoData.video.pause()
-      videoData.video.src = ''
-      this.scene.remove(videoData.mesh)
-      videoData.texture.dispose()
+  destroyMedia (id: string) {
+    const media = this.customMedia.get(id)
+    if (media) {
+      if (media.video) {
+        media.video.pause()
+        media.video.src = ''
+      }
+      this.scene.remove(media.mesh)
+      media.texture.dispose()
 
       // Get the inner mesh from the group
-      const mesh = videoData.mesh.children[0] as THREE.Mesh
+      const mesh = media.mesh.children[0] as THREE.Mesh
       if (mesh) {
         mesh.geometry.dispose()
         if (mesh.material instanceof THREE.Material) {
@@ -741,8 +724,166 @@ export class WorldRendererThree extends WorldRendererCommon {
         }
       }
 
-      this.customVideos.delete(id)
+      this.customMedia.delete(id)
     }
+  }
+
+  /**
+   * Positions a mesh exactly at startPosition and extends it along the rotation direction
+   * with the specified width and height
+   *
+   * @param mesh The mesh to position
+   * @param rotation Rotation in radians (applied to Y axis)
+   * @param startPosition The exact starting position (corner) of the mesh
+   * @param width Width of the mesh
+   * @param height Height of the mesh
+   * @param depth Depth of the mesh (default: 1)
+   * @returns The positioned mesh for chaining
+   */
+  positionMeshExact (
+    mesh: THREE.Mesh,
+    rotation: number,
+    startPosition: { x: number, y: number, z: number },
+    width: number,
+    height: number,
+    depth = 1
+  ) {
+    // avoid z-fighting with the ground plane
+    if (rotation === 0) {
+      startPosition.z += 0.001
+    }
+    if (rotation === Math.PI / 2) {
+      startPosition.x -= 0.001
+    }
+    if (rotation === Math.PI) {
+      startPosition.z -= 0.001
+    }
+    if (rotation === 3 * Math.PI / 2) {
+      startPosition.x += 0.001
+    }
+
+    // if (rotation === 0) {
+    //   width = -width
+    // }
+
+
+    // First, clean up any previous transformations
+    mesh.matrix.identity()
+    mesh.position.set(0, 0, 0)
+    mesh.rotation.set(0, 0, 0)
+    mesh.scale.set(1, 1, 1)
+
+    // By default, PlaneGeometry creates a plane in the XY plane (facing +Z)
+    // We need to set up the proper orientation for our use case
+    // Rotate the plane to face the correct direction based on the rotation parameter
+    mesh.rotateY(rotation)
+    if (rotation === Math.PI / 2 || rotation === 3 * Math.PI / 2) {
+      mesh.rotateZ(-Math.PI)
+      mesh.rotateX(-Math.PI)
+    }
+
+    // Scale it to the desired size
+    mesh.scale.set(width, height, depth)
+
+    // For a PlaneGeometry, if we want the corner at the origin, we need to offset
+    // by half the dimensions after scaling
+    mesh.geometry.translate(0.5, 0.5, 0)
+    mesh.geometry.attributes.position.needsUpdate = true
+
+    // Now place the mesh at the start position
+    mesh.position.set(startPosition.x, startPosition.y, startPosition.z)
+
+    // Create a group to hold our mesh and markers
+    const debugGroup = new THREE.Group()
+    debugGroup.add(mesh)
+
+    // Add a marker at the starting position (should be exactly at pos)
+    const startMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0xff_00_00 })
+    )
+    startMarker.position.copy(new THREE.Vector3(startPosition.x, startPosition.y, startPosition.z))
+    debugGroup.add(startMarker)
+
+    // Add a marker at the end position (width units away in the rotated direction)
+    const endX = startPosition.x + Math.cos(rotation) * width
+    const endZ = startPosition.z + Math.sin(rotation) * width
+    const endYMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0x00_00_ff })
+    )
+    endYMarker.position.set(startPosition.x, startPosition.y + height, startPosition.z)
+    debugGroup.add(endYMarker)
+
+    // Add a marker at the width endpoint
+    const endWidthMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0xff_ff_00 })
+    )
+    endWidthMarker.position.set(endX, startPosition.y, endZ)
+    debugGroup.add(endWidthMarker)
+
+    // Add a marker at the corner diagonal endpoint (both width and height)
+    const endCornerMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.1, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0xff_00_ff })
+    )
+    endCornerMarker.position.set(endX, startPosition.y + height, endZ)
+    debugGroup.add(endCornerMarker)
+
+    // Also add a visual helper to show the rotation direction
+    const directionHelper = new THREE.ArrowHelper(
+      new THREE.Vector3(Math.cos(rotation), 0, Math.sin(rotation)),
+      new THREE.Vector3(startPosition.x, startPosition.y, startPosition.z),
+      1,
+      0xff_00_00
+    )
+    debugGroup.add(directionHelper)
+
+    return {
+      mesh,
+      debugGroup
+    }
+  }
+
+  createTestCanvasTexture () {
+    const canvas = document.createElement('canvas')
+    canvas.width = 100
+    canvas.height = 100
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.font = '10px Arial'
+    ctx.fillStyle = 'red'
+    ctx.fillText('Hello World', 0, 10) // at
+    return new THREE.CanvasTexture(canvas)
+  }
+
+  /**
+   * Creates a test mesh that demonstrates the exact positioning
+   */
+  addTestMeshExact (rotationNum: number) {
+    const pos = window.cursorBlockRel().position
+    console.log('Creating exact positioned test mesh at:', pos)
+
+    // Create a plane mesh with a wireframe to visualize boundaries
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        // side: THREE.DoubleSide,
+        map: this.createTestCanvasTexture()
+      })
+    )
+
+    const width = 2
+    const height = 1
+    const rotation = THREE.MathUtils.degToRad(rotationNum * 90) // 90 degrees in radians
+
+    // Position the mesh exactly where we want it
+    const { debugGroup } = this.positionMeshExact(plane, rotation, pos, width, height)
+
+    viewer.scene.add(debugGroup)
+    console.log('Exact test mesh added with dimensions:', width, height, 'and rotation:', rotation)
+
   }
 }
 

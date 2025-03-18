@@ -11,9 +11,7 @@ customEvents.on('mineflayerBotCreated', async () => {
     })
   })
   registerBlockModelsChannel()
-  if (options.networkRelatedCustomChannels) {
-    registerMediaChannels()
-  }
+  registerMediaChannels()
 })
 
 const registerBlockModelsChannel = () => {
@@ -125,7 +123,7 @@ const registerMediaChannels = () => {
       { name: 'z', type: 'i32' },
       { name: 'width', type: 'f32' },
       { name: 'height', type: 'f32' },
-      { name: '_rotation', type: 'i16' }, // 0: 0° - towards positive z, 1: 90° - positive x, 2: 180° - negative z, 3: 270° - negative x (3-6 is same but double side)
+      { name: 'rotation', type: 'i16' }, // 0: 0° - towards positive z, 1: 90° - positive x, 2: 180° - negative z, 3: 270° - negative x (3-6 is same but double side)
       { name: 'source', type: ['pstring', { countType: 'i16' }] },
       { name: 'loop', type: 'bool' },
       { name: '_volume', type: 'f32' }, // 0
@@ -175,32 +173,28 @@ const registerMediaChannels = () => {
   bot._client.on(ADD_CHANNEL as any, (data) => {
     const { id, x, y, z, width, height, rotation, source, loop, background, opacity } = data
 
-    if (source.endsWith('.png') || source.endsWith('.jpg') || source.endsWith('.jpeg')) {
-      throw new Error('Image files are not supported yet, please use Minecraft maps instead')
-    }
-
     const worldRenderer = viewer.world as WorldRendererThree
 
     // Destroy existing video if it exists
-    worldRenderer.destroyVideo(id)
+    worldRenderer.destroyMedia(id)
 
     // Add new video
-    worldRenderer.addVideo(id, {
+    worldRenderer.addMedia(id, {
       position: { x, y, z },
       size: { width, height },
-      side: 'towards',
+      // side: 'towards',
       src: source,
-      // rotation: rotation as 0 | 1 | 2 | 3,
-      rotation: 0,
+      rotation: rotation as 0 | 1 | 2 | 3,
       doubleSide: false,
       background,
-      opacity: opacity / 100
+      opacity: opacity / 100,
+      allowOrigins: options.remoteContentNotSameOrigin === false ? [getCurrentTopDomain()] : options.remoteContentNotSameOrigin
     })
 
     // Set loop state
     if (!loop) {
-      const videoData = worldRenderer.customVideos.get(id)
-      if (videoData) {
+      const videoData = worldRenderer.customMedia.get(id)
+      if (videoData?.video) {
         videoData.video.loop = false
       }
     }
@@ -231,7 +225,7 @@ const registerMediaChannels = () => {
   bot._client.on(DESTROY_CHANNEL as any, (data) => {
     const { id } = data
     const worldRenderer = viewer.world as WorldRendererThree
-    worldRenderer.destroyVideo(id)
+    worldRenderer.destroyMedia(id)
   })
 
   // Handle media volume
@@ -284,7 +278,7 @@ export const videoCursorInteraction = () => {
   raycaster.setFromCamera(mouse, camera)
 
   // Check intersection with all video meshes
-  for (const [id, videoData] of worldRenderer.customVideos.entries()) {
+  for (const [id, videoData] of worldRenderer.customMedia.entries()) {
     // Get the actual mesh (first child of the group)
     const mesh = videoData.mesh.children[0] as THREE.Mesh
     if (!mesh) continue
@@ -307,16 +301,15 @@ export const videoCursorInteraction = () => {
 }
 window.videoCursorInteraction = videoCursorInteraction
 
-const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1, towards = true) => {
+const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1, isImage = false) => {
   const block = window.cursorBlockRel()
   if (!block) return
   const { position: startPosition } = block
 
   const worldRenderer = viewer.world as WorldRendererThree
-  worldRenderer.destroyVideo('test-video')
 
   // Add video with proper positioning
-  worldRenderer.addVideo('test-video', {
+  worldRenderer.addMedia('test-video', {
     position: {
       x: startPosition.x,
       y: startPosition.y + 1,
@@ -326,8 +319,7 @@ const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1, towards = true) 
       width: scale,
       height: scale
     },
-    side: towards ? 'towards' : 'away',
-    src: 'https://bucket.mcraft.fun/test_video.mp4',
+    src: isImage ? 'https://bucket.mcraft.fun/test_image.png' : 'https://bucket.mcraft.fun/test_video.mp4',
     rotation,
     // doubleSide: true,
     background: 0x00_00_00, // Black color
@@ -338,7 +330,29 @@ const addTestVideo = (rotation = 0 as 0 | 1 | 2 | 3, scale = 1, towards = true) 
     //   startV: 0,
     //   endV: 1
     // },
-    opacity: 1
+    opacity: 1,
+    allowOrigins: true,
   })
 }
 window.addTestVideo = addTestVideo
+
+function getCurrentTopDomain (): string {
+  const { hostname } = location
+  // Split hostname into parts
+  const parts = hostname.split('.')
+
+  // Handle special cases like co.uk, com.br, etc.
+  if (parts.length > 2) {
+    // Check for common country codes with additional segments
+    if (parts.at(-2) === 'co' ||
+      parts.at(-2) === 'com' ||
+      parts.at(-2) === 'org' ||
+      parts.at(-2) === 'gov') {
+      // Return last 3 parts (e.g., example.co.uk)
+      return parts.slice(-3).join('.')
+    }
+  }
+
+  // Return last 2 parts (e.g., example.com)
+  return parts.slice(-2).join('.')
+}
