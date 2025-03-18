@@ -620,9 +620,9 @@ export class WorldRendererThree extends WorldRendererCommon {
     // Create inner mesh for offsets
     const mesh = new THREE.Mesh(geometry, material)
 
-    const { debugGroup } = this.positionMeshExact(mesh, THREE.MathUtils.degToRad((props.rotation ?? 0) * 90), props.position, props.size.width, props.size.height)
+    const { mesh: panel } = this.positionMeshExact(mesh, THREE.MathUtils.degToRad((props.rotation ?? 0) * 90), props.position, props.size.width, props.size.height)
 
-    this.scene.add(debugGroup)
+    this.scene.add(panel)
 
     if (video) {
       // Start playing the video
@@ -664,7 +664,7 @@ export class WorldRendererThree extends WorldRendererCommon {
 
     // Store video data
     this.customMedia.set(id, {
-      mesh: debugGroup,
+      mesh: panel,
       video,
       texture,
       updateUVMapping
@@ -762,9 +762,17 @@ export class WorldRendererThree extends WorldRendererCommon {
       startPosition.x += 0.001
     }
 
-    // if (rotation === 0) {
-    //   width = -width
-    // }
+    // rotation normalize coordinates
+    if (rotation === 0) {
+      startPosition.z += 1
+    }
+    if (rotation === Math.PI) {
+      startPosition.x += 2
+    }
+    if (rotation === 3 * Math.PI / 2) {
+      startPosition.z += 1
+      startPosition.x += 2
+    }
 
 
     // First, clean up any previous transformations
