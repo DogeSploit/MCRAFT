@@ -99,10 +99,12 @@ export default () => {
     }, 1000)
 
     const freqUpdateInterval = setInterval(() => {
-      setPos({ ...following.entity.position })
-      setSkyL(bot.world.getSkyLight(following.entity.position))
-      setBlockL(bot.world.getBlockLight(following.entity.position))
-      setBiomeId(bot.world.getBiome(following.entity.position))
+      const position = following?.entity?.position || bot.entity.position
+
+      setPos({ ...position })
+      setSkyL(bot.world.getSkyLight(position))
+      setBlockL(bot.world.getBlockLight(position))
+      setBiomeId(bot.world.getBiome(position))
       setDimension(bot.game.dimension)
       setDay(bot.time.day)
       setCursorBlock(bot.blockAtCursor(5))

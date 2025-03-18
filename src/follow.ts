@@ -7,11 +7,11 @@ function handleMovement () {
   viewer.world.lastCamUpdate = now
 
   // handle losing the entity
-  if (following && !following.entity) {
+  if (following && !following?.entity?.position) {
     // if the following entity cannot be found, switch back to following the bot itself
     console.log('The entity to follow could no longer be found (left/died/too far away/etc.)')
     console.log('Switching back to following the bot itself')
-    window.following = bot.entity
+    window.following = bot
     customEvents.emit('followingPlayer', undefined)
     return
   }
@@ -54,12 +54,15 @@ export function setThirdPersonCamera (directionOnly = false) {
   // TODO: we can also be smarter about the camera to avoid obstacles coming in between.
   // and also handling special situations like water, lava, ladders, etc.
 
-  // if the following entity is not loaded yet, use the bot's entity here
-  const entity = following.entity || bot.entity
-
   // if the bot itself is being followed, just use first person camera normally
-  if (entity === bot.entity) {
-    viewer.setFirstPersonCamera(directionOnly ? null : following.entity.position, following.entity.yaw, following.entity.pitch)
+  if (following === bot) {
+    viewer.setFirstPersonCamera(directionOnly ? null : bot.entity.position, bot.entity.yaw, bot.entity.pitch)
+    return
+  }
+
+  // if the followed entity position cannot be found, just return. This will get retried later
+  if (!following?.entity?.position) {
+    console.warn('Cannot set third person camera. The followed entity position could not be found')
     return
   }
 
@@ -80,27 +83,76 @@ export function trackFollowerMovement () {
   bot.on('entityUpdate', () => handleMovement())
 }
 
-export function setFollowingPlayer (username?: string) {
-  if (!username) {
+export async function setFollowingPlayer (username?: string) {
+  if (username && bot.players[username]) {
+    // start following player
+    console.log(`Following player '${username}'`)
+
+    // tell the watcher to keep us in range of the target player
+    // via teleporting to the target player
+    bot.whisper('watcher', `follow ${username}`)
+
+
+    let target = bot.players[username]
+
+    // check if the player exists, and wait sec if it doesn't
+    if (!target) {
+      await new Promise(resolve => { setTimeout(resolve, 1000) })
+      target = bot.players[username]
+    }
+
+    // if there's still no target, give up
+    if (!target) {
+      // It still hasn't loaded, give up on following
+      console.error(`Failed to follow player '${username}' - player not found`)
+      return
+    }
+
+    // check if the target entity position is loaded, otherwise wait a bit
+    if (!target?.entity?.position) {
+      await new Promise(resolve => { setTimeout(resolve, 1000) })
+    }
+
+    // if there's still no target, give up
+    if (!target?.entity?.position) {
+      // It still hasn't loaded, give up on following
+      console.error(`Failed to follow player '${username}' - could not find entity position`)
+      return
+    }
+
+    // set the following player
+    window.following = target
+
+    // disable keyboard control of bot
+    controMax.enabled = false
+
+    // notify any listeners
+    customEvents.emit('followingPlayer', username)
+  } else {
     // stop following
     console.log(`Following self (main bot)`)
+
+    // tell the watcher to stop following
+    if (following !== bot && following?.entity?.position) {
+      // unfollow and move to current camera position
+      const { position } = getThirdPersonCameraPosition()
+      bot.whisper('watcher', `unfollow ${position.x} ${position.y} ${position.z}`)
+      // wait a bit so the teleport is complete before switching the camera
+      await new Promise(resolve => { setTimeout(resolve, 500) })
+    } else {
+      // simply unfollow
+      bot.whisper('watcher', 'unfollow')
+    }
+
+    // set the following player to the main bot
     window.following = bot
-    controMax.enabled = true // enable keyboard control of bot
+
+    // enable keyboard control of bot
+    controMax.enabled = true
+
+    // notify any listeners
     customEvents.emit('followingPlayer', undefined)
-
-    // tell the watcher to stop following and move to the current camera position
-    const { position } = getThirdPersonCameraPosition()
-    bot.whisper('watcher', `unfollow ${position.x} ${position.y} ${position.z}`)
-    return
   }
-
-  // start following player
-  console.log(`Following player '${username}'`)
-
-  window.following = bot.players[username]
-  controMax.enabled = false // disable keyboard control of bot
-  customEvents.emit('followingPlayer', username)
-  bot.whisper('watcher', `follow ${username}`) // tell the watcher to keep us following the player
 }
 
 // Handle Kradle Custom Events
@@ -111,40 +163,10 @@ customEvents.on('kradle:followPlayer', async (data) => {
 
   // undefined means following self
   if (!username) {
-    setFollowingPlayer()
+    await setFollowingPlayer()
     return
   }
 
-  // check if the player exists
-  if (!bot.players[username]) {
-    // Give it a second to see if it loads eventually
-    await new Promise(resolve => { setTimeout(resolve, 1000) })
-    if (!bot.players[username]) {
-      // It still hasn't loaded, give up on following
-      console.error(`Failed to follow player '${username}' in the game (not found)`)
-
-      // Switch to following self
-      setFollowingPlayer()
-      return
-    }
-  }
-
-  // check if the entity has been loaded
-  // TODO: this will return false even if the entity exists but is simply too far away to be rendered
-  // we need to fix this so it works no matter where the player is located. maybe teleport the bot to the player?
-  if (!bot.players[username].entity) {
-    // Give it a second to see if it loads eventually
-    await new Promise(resolve => { setTimeout(resolve, 1000) })
-    if (!bot.players[username].entity) {
-      // It still hasn't loaded, give up on following
-      console.error(`'${username}' found but it's position could not be determined`)
-
-      // Switch to following self
-      setFollowingPlayer()
-      return
-    }
-  }
-
   // Follow the player
-  setFollowingPlayer(username)
+  await setFollowingPlayer(username)
 })
