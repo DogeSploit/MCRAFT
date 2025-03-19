@@ -135,10 +135,11 @@ export async function setFollowingPlayer (username?: string) {
     // tell the watcher to stop following
     if (following !== bot && following?.entity?.position) {
       // unfollow and move to current camera position
-      const { position } = getThirdPersonCameraPosition()
+      const { position, yaw, pitch } = getThirdPersonCameraPosition()
       bot.whisper('watcher', `unfollow ${position.x} ${position.y} ${position.z}`)
       // wait a bit so the teleport is complete before switching the camera
       await new Promise(resolve => { setTimeout(resolve, 500) })
+      bot.look(yaw, pitch).catch(() => { }) // maintain camera position
     } else {
       // simply unfollow
       bot.whisper('watcher', 'unfollow')

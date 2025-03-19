@@ -19,9 +19,9 @@ const defaultOptions = {
   mouseSensX: 50,
   mouseSensY: -1,
   // mouseInvertX: false,
-  chatWidth: 320,
-  chatHeight: 90,
-  chatScale: 60,
+  chatWidth: 280,
+  chatHeight: 60,
+  chatScale: 30,
   chatOpacity: isDev ? 50 : 0, // show chat in dev
   chatOpacityOpened: 100,
   messagesLimit: 200,
