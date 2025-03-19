@@ -99,7 +99,7 @@ const defaultOptions = {
   showMinimap: 'never' as 'always' | 'singleplayer' | 'never',
   minimapOptimizations: true,
   displayBossBars: true,
-  disabledUiParts: [] as string[],
+  disabledUiParts: ['crosshair'] as string[],
   neighborChunkUpdates: true,
   highlightBlockColor: 'auto' as 'auto' | 'blue' | 'classic',
 }
