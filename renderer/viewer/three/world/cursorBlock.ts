@@ -86,12 +86,10 @@ export class CursorBlock {
     this.blockBreakMesh.scale.set(width * 1.001, height * 1.001, depth * 1.001)
     position.add(block.position)
     this.blockBreakMesh.position.set(position.x, position.y, position.z)
-    this.blockBreakMesh.visible = true
+    this.blockBreakMesh.visible = true;
 
-    //@ts-expect-error
-    state.blockBreakMesh.material.map = state.breakTextures[stage] ?? state.breakTextures.at(-1)
-    //@ts-expect-error
-    state.blockBreakMesh.material.needsUpdate = true
+    (this.blockBreakMesh.material as THREE.MeshBasicMaterial).map = this.breakTextures[stage] ?? this.breakTextures.at(-1);
+    (this.blockBreakMesh.material as THREE.MeshBasicMaterial).needsUpdate = true
   }
 
   hideBreakAnimation () {
