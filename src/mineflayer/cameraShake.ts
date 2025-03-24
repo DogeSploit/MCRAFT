@@ -8,10 +8,10 @@ class CameraShake {
     this.rollAngle = 0
   }
 
-  shakeFromDamage (yaw?: number) {
+  shakeFromDamage () {
     // Add roll animation
     const startRoll = this.rollAngle
-    const targetRoll = startRoll + (yaw ?? (Math.random() < 0.5 ? -1 : 1)) * this.damageRollAmount
+    const targetRoll = startRoll + (Math.random() < 0.5 ? -1 : 1) * this.damageRollAmount
 
     this.rollAnimation = {
       startTime: performance.now(),
@@ -77,8 +77,8 @@ customEvents.on('mineflayerBotCreated', () => {
     })
   }
 
-  customEvents.on('hurtAnimation', (yaw) => {
-    cameraShake.shakeFromDamage(yaw)
+  customEvents.on('hurtAnimation', () => {
+    cameraShake.shakeFromDamage()
   })
 
   bot._client.on('hurt_animation', ({ entityId, yaw }) => {
