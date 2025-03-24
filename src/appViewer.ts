@@ -20,6 +20,7 @@ export interface RendererReactiveState {
     chunksTotalNumber: number
     allChunksLoaded: boolean
     mesherWork: boolean
+    intersectMedia: { id: string, x: number, y: number } | null
   }
   renderer: string
   preventEscapeMenu: boolean

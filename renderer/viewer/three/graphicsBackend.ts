@@ -23,7 +23,13 @@ const getBackendMethods = (worldRenderer: WorldRendererThree) => {
     updateBreakAnimation: worldRenderer.cursorBlock.updateBreakAnimation.bind(worldRenderer.cursorBlock),
     changeHandSwingingState: worldRenderer.changeHandSwingingState.bind(worldRenderer),
     getHighestBlocks: worldRenderer.getHighestBlocks.bind(worldRenderer),
-    rerenderAllChunks: worldRenderer.rerenderAllChunks.bind(worldRenderer)
+    rerenderAllChunks: worldRenderer.rerenderAllChunks.bind(worldRenderer),
+    addMedia: worldRenderer.addMedia.bind(worldRenderer),
+    destroyMedia: worldRenderer.destroyMedia.bind(worldRenderer),
+    setVideoPlaying: worldRenderer.setVideoPlaying.bind(worldRenderer),
+    setVideoSeeking: worldRenderer.setVideoSeeking.bind(worldRenderer),
+    setVideoVolume: worldRenderer.setVideoVolume.bind(worldRenderer),
+    setVideoSpeed: worldRenderer.setVideoSpeed.bind(worldRenderer),
   }
 }
 

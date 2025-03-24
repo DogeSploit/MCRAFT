@@ -33,6 +33,8 @@ interface MediaProperties {
   opacity?: number // 0-1 value for transparency
   uvMapping?: { startU: number, endU: number, startV: number, endV: number }
   allowOrigins?: string[] | boolean
+  loop?: boolean
+  volume?: number
 }
 
 export class WorldRendererThree extends WorldRendererCommon {
@@ -374,12 +376,47 @@ export class WorldRendererThree extends WorldRendererCommon {
     return tex
   }
 
+  tryIntersectMedia () {
+    const { camera } = this
+    const raycaster = new THREE.Raycaster()
+
+    // Get mouse position at center of screen
+    const mouse = new THREE.Vector2(0, 0)
+
+    // Update the raycaster
+    raycaster.setFromCamera(mouse, camera)
+
+    let result = null as { id: string, x: number, y: number } | null
+    // Check intersection with all video meshes
+    for (const [id, videoData] of this.customMedia.entries()) {
+      // Get the actual mesh (first child of the group)
+      const mesh = videoData.mesh.children[0] as THREE.Mesh
+      if (!mesh) continue
+
+      const intersects = raycaster.intersectObject(mesh, false)
+      if (intersects.length > 0) {
+        const intersection = intersects[0]
+        const { uv } = intersection
+        if (uv) {
+          result = {
+            id,
+            x: uv.x,
+            y: uv.y
+          }
+          break
+        }
+      }
+    }
+    this.reactiveState.world.intersectMedia = result
+  }
+
   setFirstPersonCamera (pos: Vec3 | null, yaw: number, pitch: number) {
     const cam = this.cameraObjectOverride || this.camera
     const yOffset = this.displayOptions.playerState.getEyeHeight()
 
     this.camera = cam as THREE.PerspectiveCamera
     this.updateCamera(pos?.offset(0, yOffset, 0) ?? null, yaw, pitch)
+    this.tryIntersectMedia()
   }
 
   updateCamera (pos: Vec3 | null, yaw: number, pitch: number): void {
@@ -593,25 +630,6 @@ export class WorldRendererThree extends WorldRendererCommon {
     }
   }
 
-  setCameraRoll (roll: number) {
-    this.cameraRoll = roll
-    const rollQuat = new THREE.Quaternion()
-    rollQuat.setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(roll))
-
-    // Get camera's current rotation
-    const camQuat = new THREE.Quaternion()
-    this.camera.getWorldQuaternion(camQuat)
-
-    // Apply roll after camera rotation
-    const finalQuat = camQuat.multiply(rollQuat)
-    this.camera.setRotationFromQuaternion(finalQuat)
-  }
-
-  destroy (): void {
-    removeAllStats()
-    super.destroy()
-  }
-
   private createErrorTexture (width: number, height: number, background = 0x00_00_00): THREE.CanvasTexture {
     const canvas = document.createElement('canvas')
     // Scale up the canvas size for better text quality
@@ -685,8 +703,9 @@ export class WorldRendererThree extends WorldRendererCommon {
     if (!isImage) {
       video = document.createElement('video')
       video.src = props.src
-      video.loop = true
-      video.muted = true
+      video.loop = props.loop ?? true
+      video.volume = props.volume ?? 1
+      video.muted = !props.volume
       video.playsInline = true
       video.crossOrigin = 'anonymous'
     }
@@ -1000,9 +1019,28 @@ export class WorldRendererThree extends WorldRendererCommon {
     // Position the mesh exactly where we want it
     const { debugGroup } = this.positionMeshExact(plane, rotation, pos, width, height)
 
-    viewer.scene.add(debugGroup)
+    this.scene.add(debugGroup)
     console.log('Exact test mesh added with dimensions:', width, height, 'and rotation:', rotation)
 
+  }
+
+  setCameraRoll (roll: number) {
+    this.cameraRoll = roll
+    const rollQuat = new THREE.Quaternion()
+    rollQuat.setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(roll))
+
+    // Get camera's current rotation
+    const camQuat = new THREE.Quaternion()
+    this.camera.getWorldQuaternion(camQuat)
+
+    // Apply roll after camera rotation
+    const finalQuat = camQuat.multiply(rollQuat)
+    this.camera.setRotationFromQuaternion(finalQuat)
+  }
+
+  destroy (): void {
+    removeAllStats()
+    super.destroy()
   }
 }
 
