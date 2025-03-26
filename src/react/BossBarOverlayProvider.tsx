@@ -29,7 +29,9 @@ export default () => {
       setTimeout(() => addBossBar(bossBar as BossBarType), 1)
     })
     bot.on('bossBarDeleted', (bossBar) => {
-      removeBossBar(bossBar as BossBarType)
+      if (bossBar) {
+        removeBossBar(bossBar as BossBarType)
+      }
     })
   }, [])
 
