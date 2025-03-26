@@ -10,13 +10,15 @@ type IFrameSendablePayload = {
   username?: string;
 }
 
+type ReceivableActions = 'followPlayer' | 'command'
+
 export function setupIframeComms () {
   // Handle incoming messages from kradle frontend
   window.addEventListener('message', (event) => {
     const { data } = event
     if (data.source === 'kradle-frontend') {
       console.log('[iframe-rpc] [minecraft-web-client] Received message', data)
-      customEvents.emit(`kradle:${data.action as 'followPlayer'}`, data)
+      customEvents.emit(`kradle:${data.action as ReceivableActions}`, data)
     }
   })
 
@@ -43,5 +45,14 @@ export function setupIframeComms () {
       // @ts-expect-error TODO fix this type
       username
     })
+  })
+  customEvents.on('kradle:command', (data) => {
+    const { command } = data
+    if (!command) {
+      console.error('No command provided')
+      return
+    }
+
+    bot.chat(`/${command.replace(/^\//, '')}`)
   })
 }
