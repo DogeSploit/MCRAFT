@@ -68,20 +68,13 @@ export default ({
     >
       {isError && (
         <>
-          {showReconnect && onReconnect && <Button onClick={onReconnect}>
+          {/* @pranaygp - keeping this screen simple for kradle users */}
+          {/* {showReconnect && onReconnect && <Button onClick={onReconnect}>
             <b>Reconnect</b>
           </Button>}
-          {actionsSlot}
-          <Button
-            onClick={() => {
-              if (location.search) {
-                location.search = ''
-              } else {
-                window.location.reload()
-              }
-            }}
-          >
-            <b>Reset App (recommended)</b>
+          {actionsSlot} */}
+          <Button onClick={() => window.location.reload()}>
+            <b>Reconnect</b>
           </Button>
           {backAction && <Button label="Back" onClick={backAction} />}
         </>

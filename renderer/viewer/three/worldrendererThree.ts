@@ -467,31 +467,6 @@ export class WorldRendererThree extends WorldRendererCommon {
       // this.freeFlyState.position = pos
     }
 
-    // Update rotation
-
-    // // If we're following the bot, set the rotation directly
-    // if (bot === following) {
-    //   this.camera.rotation.set(pitch, yaw, this.cameraRoll, 'ZYX')
-    //   return
-    // }
-
-    // // If we're following a player, we use a smoother interpolation
-
-    // // Create start and target quaternions
-    // const startQuaternion = new THREE.Quaternion().copy(this.camera.quaternion)
-    // const targetEuler = new THREE.Euler(pitch, yaw, this.cameraRoll, 'ZYX')
-    // const targetQuaternion = new THREE.Quaternion().setFromEuler(targetEuler)
-
-    // // Create an object to tween
-    // const rotationObj = { t: 0 }
-    // new tweenJs.Tween(rotationObj)
-    //   .to({ t: 1 }, duration)
-    //   .onUpdate(() => {
-    //     // Use quaternion slerp for smooth interpolation
-    //     this.camera.quaternion.slerp(targetQuaternion, rotationObj.t)
-    //   })
-    //   .start()
-
     this.cameraShake.setBaseRotation(pitch, yaw)
   }
 
@@ -512,7 +487,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     const cam = this.camera instanceof THREE.Group ? this.camera.children.find(child => child instanceof THREE.PerspectiveCamera) as THREE.PerspectiveCamera : this.camera
     this.renderer.render(this.scene, cam)
 
-    if (this.displayOptions.inWorldRenderingConfig.showHand/*  && !this.freeFlyMode */) {
+    if (this.displayOptions.inWorldRenderingConfig.showHand && bot.game.gameMode !== 'spectator') {
       this.holdingBlock.render(this.camera, this.renderer, this.ambientLight, this.directionalLight)
       this.holdingBlockLeft.render(this.camera, this.renderer, this.ambientLight, this.directionalLight)
     }

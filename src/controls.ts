@@ -61,7 +61,7 @@ export const contro = new ControMax({
       rotateCameraRight: [null],
       rotateCameraUp: [null],
       rotateCameraDown: [null],
-      viewerConsole: [null]
+      viewerConsole: isDev ? ['Backquote'] : [null]
     },
     ui: {
       toggleFullscreen: ['F11'],

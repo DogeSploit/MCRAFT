@@ -11,7 +11,7 @@ declare const bot: Omit<import('mineflayer').Bot, 'world' | '_client'> & {
   }
 }
 declare const __type_bot: typeof bot
-declare const following: __type_bot | Player
+declare const following: typeof bot | import('mineflayer').Player
 declare const controMax: ControMax
 declare const viewer: import('renderer/viewer/lib/viewer').Viewer
 declare const appViewer: import('./appViewer').AppViewer
