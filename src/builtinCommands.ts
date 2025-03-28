@@ -7,6 +7,7 @@ import { copyFilesAsync, uniqueFileNameFromWorldName } from './browserfs'
 import { saveServer } from './flyingSquidUtils'
 import { setLoadingScreenStatus } from './appStatus'
 import { displayClientChat } from './botUtils'
+import { setFollowingPlayer } from './follow'
 
 const notImplemented = () => {
   return 'Not implemented yet'
@@ -126,8 +127,22 @@ export const commands: Array<{
       }
       if (!pos) return
       const formatted = `${pos.x.toFixed(2)} ${pos.y.toFixed(2)} ${pos.z.toFixed(2)}`
-      await navigator.clipboard.writeText(formatted)
-      writeText(`Copied position to clipboard: ${formatted}`)
+      // await navigator.clipboard.writeText(formatted)
+      writeText(`Position: ${formatted}`)
+    }
+  },
+  {
+    command: ['/follow'],
+    alwaysAvailable: true,
+    async invoke ([username]) {
+      await setFollowingPlayer(username)
+    }
+  },
+  {
+    command: ['/following'],
+    alwaysAvailable: true,
+    async invoke () {
+      writeText(`Following: ${following.username}`)
     }
   }
 ]
