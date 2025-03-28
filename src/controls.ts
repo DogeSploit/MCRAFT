@@ -189,7 +189,7 @@ let lastCommandTrigger = null as { command: string, time: number } | null
 const secondActionActivationTimeout = 300
 const secondActionCommands = {
   'general.jump' () {
-    // if (bot.game.gameMode === 'spectator') return
+    if (bot.game.gameMode === 'spectator') return
     toggleFly()
   },
   'general.forward' () {
