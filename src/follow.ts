@@ -1,9 +1,9 @@
 import type { Vec3 } from 'vec3'
 
 function handleMovement () {
-  // Throttle the function to 30 updates per second
+  // Throttle the function to 60 updates per second
   const now = Date.now()
-  if (now - appViewer.lastCamUpdate < 1000 / 30) {
+  if (now - appViewer.lastCamUpdate < 1000 / 60) {
     return
   }
 
@@ -76,6 +76,7 @@ export function setThirdPersonCamera (directionOnly = false) {
 
 export function trackFollowerMovement () {
   bot.on('move', () => handleMovement())
+  bot.on('forcedMove', () => handleMovement())
 
   // Handle Entity Changes
   bot.on('entityElytraFlew', () => handleMovement())
