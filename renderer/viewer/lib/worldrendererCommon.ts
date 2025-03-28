@@ -52,7 +52,7 @@ export const defaultWorldRendererConfig = {
 export type WorldRendererConfig = typeof defaultWorldRendererConfig
 
 export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any> {
-  displayStats = true
+  displayStats = false
   worldSizeParams = { minY: 0, worldHeight: 256 }
 
   active = false

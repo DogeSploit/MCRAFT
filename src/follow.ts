@@ -12,8 +12,7 @@ function handleMovement () {
     // if the following entity cannot be found, switch back to following the bot itself
     console.log('The entity to follow could no longer be found (left/died/too far away/etc.)')
     console.log('Switching back to following the bot itself')
-    window.following = bot
-    customEvents.emit('followingPlayer', undefined)
+    void setFollowingPlayer()
     return
   }
 
