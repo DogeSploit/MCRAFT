@@ -195,9 +195,9 @@ const appConfig = defineConfig({
                     } else if (!dev) {
                         await execAsync('pnpm run build-mesher')
                     }
-                    if (fs.existsSync('./prismarine-viewer/dist/webgpuRendererWorker.js')) {
+                    if (fs.existsSync('./renderer/dist/webgpuRendererWorker.js')) {
                         // copy worker
-                        fs.copyFileSync('./prismarine-viewer/dist/webgpuRendererWorker.js', './dist/webgpuRendererWorker.js')
+                        fs.copyFileSync('./renderer/dist/webgpuRendererWorker.js', './dist/webgpuRendererWorker.js')
                     } else {
                         await execAsync('pnpm run build-other-workers')
                     }

@@ -111,10 +111,13 @@ const defaultOptions = {
   disabledUiParts: [] as string[],
   neighborChunkUpdates: true,
   highlightBlockColor: 'auto' as 'auto' | 'blue' | 'classic',
+  activeRenderer: 'webgpu',
   rendererOptions: {
     three: {
       _experimentalSmoothChunkLoading: true,
       _renderByChunks: false
+    },
+    webgpu: {
     }
   }
 }

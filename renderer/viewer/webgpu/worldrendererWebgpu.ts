@@ -2,17 +2,18 @@ import { Vec3 } from 'vec3'
 // import { addBlocksSection, addWebgpuListener, webgpuChannel } from '../../examples/webgpuRendererMain'
 import { pickObj } from '@zardoy/utils'
 import { GUI } from 'lil-gui'
-import type { WebglData } from '../prepare/webglData'
-import { prepareCreateWebgpuBlocksModelsData } from '../../examples/webgpuBlockModels'
-import type { workerProxyType } from '../../examples/webgpuRendererWorker'
-import { useWorkerProxy } from '../../examples/workerProxy'
-import { defaultWebgpuRendererParams, rendererParamsGui } from '../../examples/webgpuRendererShared'
-import { loadJSON } from './utils.web'
-import { WorldRendererCommon, WorldRendererConfig } from './worldrendererCommon'
-import { MesherGeometryOutput } from './mesher/shared'
-import { addNewStat, addNewStat2, updateStatText } from './ui/newStats'
-import { isMobile } from './simpleUtils'
-import { WorldRendererThree } from './worldrendererThree'
+import { WebgpuInitOptions } from 'renderer/viewer/webgpu/graphicsBackendWebgpu'
+import * as THREE from 'three'
+import { prepareCreateWebgpuBlocksModelsData } from '../../playground/webgpuBlockModels'
+import type { workerProxyType } from '../../playground/webgpuRendererWorker'
+import { useWorkerProxy } from '../../playground/workerProxy'
+import { defaultWebgpuRendererParams, rendererParamsGui } from '../../playground/webgpuRendererShared'
+import { WorldRendererCommon, WorldRendererConfig } from '../lib/worldrendererCommon'
+import { MesherGeometryOutput } from '../lib/mesher/shared'
+import { addNewStat, addNewStat2, updateStatText } from '../lib/ui/newStats'
+import { isMobile } from '../lib/simpleUtils'
+import { WorldRendererThree } from '../three/worldrendererThree'
+import { DisplayWorldOptions, GraphicsInitOptions } from '../../../src/appViewer'
 
 export class WorldRendererWebgpu extends WorldRendererCommon {
   outputFormat = 'webgpu' as const
@@ -30,14 +31,13 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
   preRender = () => {}
   rendererParams = defaultWebgpuRendererParams
   initCalled = false
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
 
   webgpuChannel: typeof workerProxyType['__workerProxy'] = this.getPlaceholderChannel()
   rendererDevice = '...'
-  powerPreference: string | undefined
 
-  constructor (config: WorldRendererConfig, public webglRenderer: THREE.WebGLRenderer, { powerPreference } = {} as any) {
-    super(config)
-    this.powerPreference = powerPreference
+  constructor (public initOptions: WebgpuInitOptions, public displayOptions: DisplayWorldOptions) {
+    super(initOptions.resourcesManager, displayOptions, displayOptions.version)
 
     void this.readyWorkerPromise.then(() => {
       this.addWebgpuListener('rendererProblem', (data) => {
@@ -49,9 +49,11 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
       const loadedChunks = Object.keys(this.finishedChunks).length
       updateStatText('loaded-chunks', `${loadedChunks}/${this.chunksLength} chunks (${this.lastChunkDistance}/${this.viewDistance})`)
     })
+
+    this.init()
   }
 
-  destroy () {
+  override destroy () {
     this.abortController.abort()
     this.webgpuChannel.destroy() // still needed in case if running in the same thread
     if (this.worker instanceof Worker) {
@@ -98,9 +100,9 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
     })
   }
 
-  override async setVersion (version, texturesVersion = version): Promise<any> {
+  override async setVersion (version): Promise<any> {
     return Promise.all([
-      super.setVersion(version, texturesVersion),
+      super.setVersion(version),
       this.readyPromise
     ])
   }
@@ -163,15 +165,16 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
   updatePosDataChunk (key: string) {
   }
 
-  async updateTexturesData (resourcePackUpdate = false): Promise<void> {
-    const { blocksDataModelDebug: blocksDataModelBefore, interestedTextureTiles } = prepareCreateWebgpuBlocksModelsData()
-    await super.updateTexturesData(undefined, [...interestedTextureTiles].map(x => x.replace('block/', '')))
-    const { blocksDataModel, blocksDataModelDebug, allBlocksStateIdToModelIdMap } = prepareCreateWebgpuBlocksModelsData()
+  async updateAssetsData (resourcePackUpdate = false): Promise<void> {
+    // const { blocksDataModelDebug: blocksDataModelBefore, interestedTextureTiles } = prepareCreateWebgpuBlocksModelsData(this)
+    // const interestedBlockTiles = [...interestedTextureTiles].map(x => x.replace('block/', ''))
+    await super.updateAssetsData()
+    const { blocksDataModel, blocksDataModelDebug, allBlocksStateIdToModelIdMap } = prepareCreateWebgpuBlocksModelsData(this)
     // this.webgpuChannel.updateModels(blocksDataModel)
     this.sendDataForWebgpuRenderer({ allBlocksStateIdToModelIdMap })
     void this.initWebgpu(blocksDataModel)
     if (resourcePackUpdate) {
-      const blob = await fetch(this.material.map!.image.src).then(async (res) => res.blob())
+      const blob = await fetch(this.resourcesManager.currentResources!.blocksAtlasParser.latestImage).then(async (res) => res.blob())
       this.webgpuChannel.updateTexture(blob)
     }
   }
@@ -184,19 +187,20 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
     this.webgpuChannel.updateBackground(color)
   }
 
-  setHighlightCursorBlock (position: typeof this.cursorBlock): void {
+  cursorBlockPosition: Vec3 | undefined
+  setHighlightCursorBlock (position: Vec3): void {
     const useChangeWorker = true
-    if (this.cursorBlock) {
-      const worker = this.workers[this.getWorkerNumber(this.cursorBlock, useChangeWorker)]
-      worker.postMessage({ type: 'specialBlockState', data: { value: null, position: this.cursorBlock } })
-      this.setSectionDirty(this.cursorBlock, true, useChangeWorker)
+    if (this.cursorBlockPosition) {
+      const worker = this.workers[this.getWorkerNumber(this.cursorBlockPosition, useChangeWorker)]
+      worker.postMessage({ type: 'specialBlockState', data: { value: null, position: this.cursorBlockPosition } })
+      this.setSectionDirty(this.cursorBlockPosition, true, useChangeWorker)
     }
 
-    this.cursorBlock = position
-    if (this.cursorBlock) {
-      const worker = this.workers[this.getWorkerNumber(this.cursorBlock, useChangeWorker)]
-      worker.postMessage({ type: 'specialBlockState', data: { value: 'highlight', position: this.cursorBlock } })
-      this.setSectionDirty(this.cursorBlock, true, useChangeWorker)
+    this.cursorBlockPosition = position
+    if (this.cursorBlockPosition) {
+      const worker = this.workers[this.getWorkerNumber(this.cursorBlockPosition, useChangeWorker)]
+      worker.postMessage({ type: 'specialBlockState', data: { value: 'highlight', position: this.cursorBlockPosition } })
+      this.setSectionDirty(this.cursorBlockPosition, true, useChangeWorker)
     }
   }
 
@@ -204,7 +208,7 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
   removeColumn (x, z) {
     super.removeColumn(x, z)
 
-    for (let y = this.worldConfig.minY; y < this.worldConfig.worldHeight; y += 16) {
+    for (let y = this.worldSizeParams.minY; y < this.worldSizeParams.worldHeight; y += 16) {
       this.webgpuChannel.removeBlocksSection(`${x},${y},${z}`)
     }
   }
@@ -215,9 +219,10 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
     // do not use worker in safari, it is bugged
     const USE_WORKER = defaultWebgpuRendererParams.webgpuWorker
 
-    const playground = this.config.isPlayground
-    const { image } = (this.material.map!)
-    const imageBlob = await fetch(image.src).then(async (res) => res.blob())
+    // const playground = this.displayOptions.isPlayground
+    const playground = false
+    const image = this.resourcesManager.currentResources!.blocksAtlasParser.latestImage
+    const imageBlob = await fetch(image).then(async (res) => res.blob())
 
     const existingCanvas = document.getElementById('viewer-canvas')
     existingCanvas?.remove()
@@ -240,9 +245,9 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
       this.worker = messageChannel.port1
       messageChannel.port1.start()
       messageChannel.port2.start()
-      await import('../../examples/webgpuRendererWorker')
+      await import('../../playground/webgpuRendererWorker')
     }
-    addWebgpuDebugUi(this.worker, playground, this.webglRenderer)
+    addWebgpuDebugUi(this.worker, playground, this)
     this.webgpuChannel = useWorkerProxy<typeof workerProxyType>(this.worker, true)
     this._readyWorkerPromise.resolve(undefined)
     this.webgpuChannel.canvas(
@@ -251,7 +256,7 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
       playground,
       pickObj(localStorage, 'vertShader', 'fragShader', 'computeShader'),
       blocksDataModel,
-      { powerPreference: this.powerPreference as GPUPowerPreference }
+      { powerPreference: this.initOptions.config.powerPreference }
     )
 
     if (!USE_WORKER) {
@@ -342,7 +347,7 @@ class RendererProblemReporter {
   }
 }
 
-const addWebgpuDebugUi = (worker, isPlayground, renderer) => {
+const addWebgpuDebugUi = (worker, isPlayground, worldRenderer: WorldRendererWebgpu) => {
   // todo destroy
   const mobile = isMobile()
   const { updateText } = addNewStat('fps', 200, undefined, 0)
@@ -357,7 +362,7 @@ const addWebgpuDebugUi = (worker, isPlayground, renderer) => {
     }
     if (e.data.type === 'stats') {
       updateTextGpuStats(e.data.stats)
-      viewer.world.rendererDevice = `${e.data.device} WebGL data: ${WorldRendererThree.getRendererInfo(renderer)}`
+      // worldRenderer.rendererDevice = `${e.data.device} WebGL data: ${WorldRendererThree.getRendererInfo(new THREE.WebGLRenderer())}`
     }
   })
 
@@ -388,18 +393,18 @@ const addWebgpuDebugUi = (worker, isPlayground, renderer) => {
     setTimeout(() => {
       gui.open(false)
     }, 500)
-    for (const rendererParam of Object.entries(viewer.world.rendererParams)) {
-      const [key, value] = rendererParam
-      if (!rendererParamsGui[key]) continue
-      // eslint-disable-next-line @typescript-eslint/no-loop-func
-      gui.add(viewer.world.rendererParams, key).onChange((newVal) => {
-        viewer.world.updateRendererParams({ [key]: newVal })
-        if (rendererParamsGui[key]?.qsReload) {
-          const searchParams = new URLSearchParams(window.location.search)
-          searchParams.set(key, String(value))
-          window.location.search = searchParams.toString()
-        }
-      })
-    }
+    // for (const rendererParam of Object.entries(viewer.world.rendererParams)) {
+    //   const [key, value] = rendererParam
+    //   if (!rendererParamsGui[key]) continue
+    //   // eslint-disable-next-line @typescript-eslint/no-loop-func
+    //   gui.add(viewer.world.rendererParams, key).onChange((newVal) => {
+    //     viewer.world.updateRendererParams({ [key]: newVal })
+    //     if (rendererParamsGui[key]?.qsReload) {
+    //       const searchParams = new URLSearchParams(window.location.search)
+    //       searchParams.set(key, String(value))
+    //       window.location.search = searchParams.toString()
+    //     }
+    //   })
+    // }
   }
 }

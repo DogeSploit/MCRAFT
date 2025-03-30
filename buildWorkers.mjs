@@ -29,9 +29,9 @@ const sharedAliases = {
 const result = await (watch ? context : build)({
   bundle: true,
   platform: 'browser',
-  // entryPoints: ['prismarine-viewer/examples/webgpuRendererWorker.ts', 'src/worldSaveWorker.ts'],
-  entryPoints: ['prismarine-viewer/examples/webgpuRendererWorker.ts'],
-  outdir: 'prismarine-viewer/dist/',
+  // entryPoints: ['renderer/playground/webgpuRendererWorker.ts', 'src/worldSaveWorker.ts'],
+  entryPoints: ['./renderer/playground/webgpuRendererWorker.ts'],
+  outdir: 'renderer/dist/',
   sourcemap: watch ? 'inline' : 'external',
   minify: !watch,
   treeShaking: true,
@@ -42,10 +42,10 @@ const result = await (watch ? context : build)({
       name: 'writeOutput',
       setup (build) {
         build.onEnd(({ outputFiles }) => {
-          fs.mkdirSync('prismarine-viewer/public', { recursive: true })
+          fs.mkdirSync('renderer/public', { recursive: true })
           fs.mkdirSync('dist', { recursive: true })
           for (const file of outputFiles) {
-            for (const dir of ['prismarine-viewer/dist', 'dist']) {
+            for (const dir of ['renderer/dist', 'dist']) {
               const baseName = path.basename(file.path)
               fs.mkdirSync(dir, { recursive: true })
               fs.writeFileSync(path.join(dir, baseName), file.contents)

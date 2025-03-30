@@ -1,7 +1,6 @@
 import * as fs from 'fs'
 import { join } from 'path'
 import { promisify } from 'util'
-import fs from 'fs'
 import sanitizeFilename from 'sanitize-filename'
 import { oneOf } from '@zardoy/utils'
 import * as browserfs from 'browserfs'

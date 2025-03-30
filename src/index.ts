@@ -27,7 +27,6 @@ import { options } from './optionsStorage'
 import './reactUi'
 import { lockUrl, onBotCreate } from './controls'
 import './dragndrop'
-import { possiblyCleanHandle, resetStateAfterDisconnect } from './browserfs'
 import { watchOptionsAfterViewerInit, watchOptionsAfterWorldViewInit } from './watchOptions'
 import downloadAndOpenFile from './downloadAndOpenFile'
 
@@ -60,7 +59,6 @@ import dayCycle from './dayCycle'
 
 import { onAppLoad, resourcepackReload, resourcePackState } from './resourcePack'
 import { ConnectPeerOptions, connectToPeer } from './localServerMultiplayer'
-import CustomChannelClient from './customClient'
 import { registerServiceWorker } from './serviceWorker'
 import { appStatusState, lastConnectOptions } from './react/AppStatusProvider'
 
@@ -69,7 +67,6 @@ import { watchFov } from './rendererUtils'
 import { loadInMemorySave } from './react/SingleplayerProvider'
 
 import { possiblyHandleStateVariable } from './googledrive'
-import flyingSquidEvents from './flyingSquidEvents'
 import { showNotification } from './react/NotificationProvider'
 import { saveToBrowserMemory } from './react/PauseScreen'
 import './devReload'
@@ -98,6 +95,7 @@ import { appViewer } from './appViewer'
 import createGraphicsBackend from 'renderer/viewer/three/graphicsBackend'
 import { subscribeKey } from 'valtio/utils'
 import { destroyLocalServerMain, startLocalServerMain } from './integratedServer/main'
+import createWebgpuBackend from 'renderer/viewer/webgpu/graphicsBackendWebgpu'
 
 window.debug = debug
 window.beforeRenderFrame = []
@@ -116,7 +114,7 @@ onAppLoad()
 if (appQueryParams.testCrashApp === '2') throw new Error('test')
 
 const loadBackend = () => {
-  appViewer.loadBackend(createGraphicsBackend)
+  appViewer.loadBackend(createWebgpuBackend)
 }
 window.loadBackend = loadBackend
 if (process.env.SINGLE_FILE_BUILD_MODE) {
@@ -240,14 +238,13 @@ export async function connect (connectOptions: ConnectOptions) {
       //@ts-expect-error
       window.bot = bot = undefined
     }
-    resetStateAfterDisconnect()
     cleanFs()
   }
   const cleanFs = () => {
     if (singleplayer && !fsState.inMemorySave) {
-      possiblyCleanHandle(() => {
-        // todo: this is not enough, we need to wait for all async operations to finish
-      })
+      // possiblyCleanHandle(() => {
+      //   // todo: this is not enough, we need to wait for all async operations to finish
+      // })
     }
   }
   let lastPacket = undefined as string | undefined
@@ -484,7 +481,7 @@ export async function connect (connectOptions: ConnectOptions) {
       } : {},
       ...localReplaySession ? {
         connect () { },
-        Client: CustomChannelClient as any,
+        // Client: CustomChannelClient as any,
       } : {},
       onMsaCode (data) {
         signInMessageState.code = data.user_code
@@ -720,7 +717,7 @@ export async function connect (connectOptions: ConnectOptions) {
 
     console.log('bot spawned - starting viewer')
     appViewer.startWorld(bot.world, renderDistance)
-    appViewer.worldView.listenToBot(bot)
+    appViewer.worldView!.listenToBot(bot)
 
     initMotionTracking()
     dayCycle()

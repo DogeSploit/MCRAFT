@@ -21,6 +21,12 @@
         // however might need to consider includeing *only needed libraries* instead of using this
         "maxNodeModuleJsDepth": 1,
         "strictNullChecks": true,
+        "baseUrl": ".",
+        "paths": {
+            "flying-squid/dist/*": [
+                "./node_modules/flying-squid/src/*"
+            ]
+        }
     },
     "include": [
         "src",

@@ -49,9 +49,10 @@ const defaultGraphicsBackendConfig: GraphicsBackendConfig = {
   sceneBackground: 'lightblue'
 }
 
-export interface GraphicsInitOptions {
+export interface GraphicsInitOptions<S = any> {
   resourcesManager: ResourcesManager
   config: GraphicsBackendConfig
+  rendererSpecificSettings: S
 
   displayCriticalError: (error: Error) => void
 }
@@ -65,7 +66,9 @@ export interface DisplayWorldOptions {
   nonReactiveState: NonReactiveState
 }
 
-export type GraphicsBackendLoader = (options: GraphicsInitOptions) => GraphicsBackend
+export type GraphicsBackendLoader = ((options: GraphicsInitOptions) => GraphicsBackend) & {
+  id: string
+}
 
 // no sync methods
 export interface GraphicsBackend {
@@ -123,6 +126,7 @@ export class AppViewer {
         console.error(error)
         setLoadingScreenStatus(error.message, true)
       },
+      rendererSpecificSettings: options.rendererOptions[this.backendLoader?.id] ?? {},
     }
     this.backend = loader(loaderOptions)
 

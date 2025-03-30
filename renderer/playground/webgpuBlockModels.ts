@@ -3,9 +3,10 @@ import worldBlockProvider from 'mc-assets/dist/worldBlockProvider'
 import PrismarineBlock, { Block } from 'prismarine-block'
 import { IndexedBlock } from 'minecraft-data'
 import { getPreflatBlock } from '../viewer/lib/mesher/getPreflatBlock'
+import { WorldRendererWebgpu } from '../viewer/webgpu/worldrendererWebgpu'
 import { WEBGPU_FULL_TEXTURES_LIMIT } from './webgpuRendererShared'
 
-export const prepareCreateWebgpuBlocksModelsData = () => {
+export const prepareCreateWebgpuBlocksModelsData = (worldRenderer: WorldRendererWebgpu) => {
   const blocksMap = {
     'double_stone_slab': 'stone',
     'stone_slab': 'stone',
@@ -27,9 +28,8 @@ export const prepareCreateWebgpuBlocksModelsData = () => {
     'purpur_slab': 'purpur_block'
   }
 
-  const isPreflat = versionToNumber(viewer.world.version!) < versionToNumber('1.13')
-  const provider = worldBlockProvider(viewer.world.blockstatesModels, viewer.world.blocksAtlasParser?.atlasJson ?? viewer.world.blocksAtlases, 'latest')
-  const PBlockOriginal = PrismarineBlock(viewer.world.version!)
+  const isPreflat = versionToNumber(worldRenderer.version) < versionToNumber('1.13')
+  const PBlockOriginal = PrismarineBlock(worldRenderer.version)
 
   const interestedTextureTiles = new Set<string>()
   const blocksDataModelDebug = {} as AllBlocksDataModels
@@ -39,7 +39,7 @@ export const prepareCreateWebgpuBlocksModelsData = () => {
   const allBlocksStateIdToModelIdMap = {} as AllBlocksStateIdToModelIdMap
 
   const addBlockModel = (state: number, name: string, props: Record<string, any>, mcBlockData?: IndexedBlock, defaultState = false) => {
-    const models = provider.getAllResolvedModels0_1({
+    const models = worldRenderer.resourcesManager.currentResources!.worldBlockProvider.getAllResolvedModels0_1({
       name,
       properties: props
     }, isPreflat)
@@ -113,7 +113,7 @@ export const prepareCreateWebgpuBlocksModelsData = () => {
       const textureOverride = textureOverrideFullBlocks[block.name] as string | undefined
       if (textureOverride) {
         const k = i++
-        const texture = provider.getTextureInfo(textureOverride)
+        const texture = worldRenderer.resourcesManager.currentResources!.worldBlockProvider.getTextureInfo(textureOverride)
         if (!texture) {
           console.warn('Missing texture override')
           continue

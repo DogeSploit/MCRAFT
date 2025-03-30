@@ -1,10 +1,10 @@
-import { useWorkerProxy } from 'prismarine-viewer/examples/workerProxy'
+import { useWorkerProxy } from 'renderer/playground/workerProxy'
 import { options } from '../optionsStorage'
-import { setLoadingScreenStatus } from '../utils'
 import { chatInputValueGlobal } from '../react/Chat'
 import { showModal } from '../globalState'
 import { showNotification } from '../react/NotificationProvider'
 import { fsState } from '../loadSave'
+import { setLoadingScreenStatus } from '../appStatus'
 import type { workerProxyType, BackEvents, CustomAppSettings } from './worker'
 import { createLocalServerClientImpl } from './customClient'
 import { getMcDataForWorker } from './workerMcData.mjs'
@@ -13,7 +13,10 @@ import { getMcDataForWorker } from './workerMcData.mjs'
 export let serverChannel: typeof workerProxyType['__workerProxy'] | undefined
 let worker: Worker | undefined
 let lastOptions: any
-let lastCustomSettings: CustomAppSettings
+let lastCustomSettings: CustomAppSettings = {
+  autoSave: true,
+  stopLoad: true,
+}
 
 const addEventListener = <T extends keyof BackEvents> (type: T, listener: (data: BackEvents[T]) => void) => {
   if (!worker) throw new Error('Worker not started yet')

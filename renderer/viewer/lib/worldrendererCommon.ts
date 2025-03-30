@@ -98,7 +98,6 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
   ONMESSAGE_TIME_LIMIT = 30 // ms
 
   handleResize = () => { }
-  camera: THREE.PerspectiveCamera
   highestBlocksByChunks = {} as Record<string, { [chunkKey: string]: HighestBlockInfo }>
   highestBlocksBySections = {} as Record<string, { [sectionKey: string]: HighestBlockInfo }>
   blockEntities = {}

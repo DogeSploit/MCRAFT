@@ -1,4 +1,4 @@
-import { createWorkerProxy } from 'prismarine-viewer/examples/workerProxy'
+import { createWorkerProxy } from 'renderer/playground/workerProxy'
 import { startLocalServer } from '../createLocalServer'
 import defaultServerOptions from '../defaultLocalServerOptions'
 import { createCustomServerImpl } from './customServer'

@@ -3,11 +3,12 @@
 import { subscribeKey } from 'valtio/utils'
 import { isMobile } from 'renderer/viewer/lib/simpleUtils'
 import { WorldDataEmitter } from 'renderer/viewer/lib/worldDataEmitter'
-import { WorldRendererWebgpu } from '../renderer/viewer/three/worldrendererWebgpu'
+import { WorldRendererWebgpu } from 'renderer/viewer/webgpu/worldrendererWebgpu'
 import { options, watchValue } from './optionsStorage'
 import { reloadChunks } from './utils'
 import { miscUiState } from './globalState'
 import { isCypress } from './standaloneUtils'
+import { updateLocalServerSettings } from './integratedServer/main'
 
 globalThis.viewer ??= { world: {} }
 
@@ -111,30 +112,6 @@ export const watchOptionsAfterViewerInit = () => {
 
   watchValue(options, o => {
     // appViewer.inWorldRenderingConfig.neighborChunkUpdates = o.neighborChunkUpdates
-  })
-  watchValue(options, o => {
-    viewer.powerPreference = o.gpuPreference
-  })
-
-  onRendererParamsUpdate()
-
-  if (viewer.world instanceof WorldRendererWebgpu) {
-    Object.assign(viewer.world.rendererParams, options.webgpuRendererParams)
-    const oldUpdateRendererParams = viewer.world.updateRendererParams.bind(viewer.world)
-    viewer.world.updateRendererParams = (...args) => {
-      oldUpdateRendererParams(...args)
-      Object.assign(options.webgpuRendererParams, viewer.world.rendererParams)
-      onRendererParamsUpdate()
-    }
-  }
-}
-
-const onRendererParamsUpdate = () => {
-  if (worldView) {
-    worldView.allowPositionUpdate = viewer.world.rendererParams.allowChunksViewUpdate
-  }
-  updateLocalServerSettings({
-    stopLoad: !viewer.world.rendererParams.allowChunksViewUpdate
   })
 }
 

@@ -66,6 +66,7 @@ export class WorldRendererThree extends WorldRendererCommon {
   }>()
   cameraShake: CameraShake
   waitingChunksToDisplay = {} as { [chunkKey: string]: SectionKey[] }
+  camera: THREE.PerspectiveCamera
 
   get tilesRendered () {
     return Object.values(this.sectionObjects).reduce((acc, obj) => acc + (obj as any).tilesCount, 0)

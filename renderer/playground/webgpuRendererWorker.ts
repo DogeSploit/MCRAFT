@@ -153,6 +153,7 @@ export const workerProxyType = createWorkerProxy({
           visibleFaces: [0, 1, 2, 3, 4, 5],
           modelId: model || Math.floor(Math.random() * 3000),
           block: '',
+          transparent: false,
         } satisfies BlockType
       }
     }
