@@ -9,6 +9,8 @@ import type { workerProxyType, BackEvents, CustomAppSettings } from './worker'
 import { createLocalServerClientImpl } from './customClient'
 import { getMcDataForWorker } from './workerMcData.mjs'
 
+Error.stackTraceLimit = 100
+
 // eslint-disable-next-line import/no-mutable-exports
 export let serverChannel: typeof workerProxyType['__workerProxy'] | undefined
 let worker: Worker | undefined
@@ -34,22 +36,15 @@ export const getLocalServerOptions = () => {
 const restorePatchedDataDeep = (data) => {
   // add _isBuffer to Uint8Array
   if (data instanceof Uint8Array) {
-    //@ts-expect-error
-    data._isBuffer = true
-    return data
-  }
-  if (Array.isArray(data)) {
-    for (const item of data) {
-      restorePatchedDataDeep(item)
-    }
-    return data
+    return Buffer.from(data)
   }
   if (typeof data === 'object' && data !== null) {
     // eslint-disable-next-line guard-for-in
     for (const key in data) {
-      restorePatchedDataDeep(data[key])
+      data[key] = restorePatchedDataDeep(data[key])
     }
   }
+  return data
 }
 
 export const updateLocalServerSettings = (settings: Partial<CustomAppSettings>) => {
@@ -84,8 +79,12 @@ export const startLocalServerMain = async (serverOptions: { version: any, worldF
     serverChannel?.packet(data)
   }, (processData) => {
     addEventListener('packet', (data) => {
-      restorePatchedDataDeep(data)
-      processData(data)
+      const restored = restorePatchedDataDeep(data)
+      // incorrect flying squid packet on pre 1.13
+      if (data.name === 'custom_payload' && data.params.channel === 'MC|Brand') {
+        return
+      }
+      processData(restored)
       if (data.name === 'map_chunk') {
         addStatPerSec('map_chunk')
       }
@@ -122,11 +121,16 @@ export const destroyLocalServerMain = async (throwErr = true) => {
   }
 
   void serverChannel!.quit()
-  await new Promise<void>(resolve => {
-    addEventListener('quit', () => {
-      resolve()
+  await Promise.race([
+    new Promise<void>(resolve => {
+      addEventListener('quit', () => {
+        resolve()
+      })
+    }),
+    new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('Server quit timeout after 5s')), 5000)
     })
-  })
+  ])
   worker.terminate()
   worker = undefined
   lastOptions = undefined

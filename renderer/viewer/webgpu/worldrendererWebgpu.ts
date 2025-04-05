@@ -315,6 +315,10 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
 
     this._readyPromise.resolve(undefined)
   }
+
+  worldStop () {
+    this.webgpuChannel.stopRender()
+  }
 }
 
 class RendererProblemReporter {

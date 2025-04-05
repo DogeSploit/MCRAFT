@@ -195,6 +195,7 @@ export async function connect (connectOptions: ConnectOptions) {
   let bot!: typeof __type_bot
   const destroyAll = () => {
     if (ended) return
+    errorAbortController.abort()
     ended = true
     progress.end()
     // dont reset viewer so we can still do debugging
@@ -232,7 +233,6 @@ export async function connect (connectOptions: ConnectOptions) {
     if (err === 'ResizeObserver loop completed with undelivered notifications.') {
       return
     }
-    errorAbortController.abort()
     if (isCypress()) throw err
     miscUiState.hasErrors = true
     if (miscUiState.gameLoaded) return
@@ -243,6 +243,7 @@ export async function connect (connectOptions: ConnectOptions) {
     destroyAll()
   }
 
+  // todo(hard): remove it!
   const errorAbortController = new AbortController()
   window.addEventListener('unhandledrejection', (e) => {
     if (e.reason.name === 'ServerPluginLoadFailure') {

@@ -9,7 +9,7 @@ export const defaultWebgpuRendererParams = {
   godRays: true,
   occlusionActive: true,
   earlyZRejection: false,
-  allowChunksViewUpdate: false
+  allowChunksViewUpdate: true
 }
 
 export const rendererParamsGui = {

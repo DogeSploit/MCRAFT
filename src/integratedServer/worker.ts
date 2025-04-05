@@ -125,7 +125,7 @@ export const workerProxyType = createWorkerProxy({
   },
   packet (data) {
     if (!processDataGlobal) throw new Error('processDataGlobal is not set yet')
-    processDataGlobal(data)
+    processDataGlobal(restorePatchedDataDeep(data))
   },
   updateSettings (settings) {
     globalSettings = settings
@@ -140,6 +140,20 @@ export const workerProxyType = createWorkerProxy({
     postMessage('quit')
   }
 })
+
+const restorePatchedDataDeep = (data) => {
+  // add _isBuffer to Uint8Array
+  if (data instanceof Uint8Array) {
+    return Buffer.from(data)
+  }
+  if (typeof data === 'object' && data !== null) {
+    // eslint-disable-next-line guard-for-in
+    for (const key in data) {
+      data[key] = restorePatchedDataDeep(data[key])
+    }
+  }
+  return data
+}
 
 setInterval(() => {
   if (server && globalSettings.autoSave) {

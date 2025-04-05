@@ -67,7 +67,6 @@ const defaultOptions = {
 
   // antiAliasing: false,
 
-  webgpuRendererParams: {} as Record<string, any>,
   clipWorldBelowY: undefined as undefined | number, // will be removed
   disableSignsMapsSupport: false,
   singleplayerAutoSave: false,
