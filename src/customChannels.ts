@@ -179,13 +179,30 @@ const registerMediaChannels = () => {
   ]
 
   // Register channels
-  bot._client.registerChannel(ADD_CHANNEL, addPacketStructure, true)
-  bot._client.registerChannel(PLAY_CHANNEL, noDataPacketStructure, true)
-  bot._client.registerChannel(PAUSE_CHANNEL, noDataPacketStructure, true)
-  bot._client.registerChannel(SEEK_CHANNEL, setNumberPacketStructure, true)
-  bot._client.registerChannel(VOLUME_CHANNEL, setNumberPacketStructure, true)
-  bot._client.registerChannel(SPEED_CHANNEL, setNumberPacketStructure, true)
-  bot._client.registerChannel(DESTROY_CHANNEL, noDataPacketStructure, true)
+  registerChannel(PLAY_CHANNEL, noDataPacketStructure, (data) => {
+    const { id } = data
+    getThreeJsRendererMethods()?.setVideoPlaying(id, true)
+  }, true)
+  registerChannel(PAUSE_CHANNEL, noDataPacketStructure, (data) => {
+    const { id } = data
+    getThreeJsRendererMethods()?.setVideoPlaying(id, false)
+  }, true)
+  registerChannel(SEEK_CHANNEL, setNumberPacketStructure, (data) => {
+    const { id, seconds } = data
+    getThreeJsRendererMethods()?.setVideoSeeking(id, seconds)
+  }, true)
+  registerChannel(VOLUME_CHANNEL, setNumberPacketStructure, (data) => {
+    const { id, volume } = data
+    getThreeJsRendererMethods()?.setVideoVolume(id, volume)
+  }, true)
+  registerChannel(SPEED_CHANNEL, setNumberPacketStructure, (data) => {
+    const { id, speed } = data
+    getThreeJsRendererMethods()?.setVideoSpeed(id, speed)
+  }, true)
+  registerChannel(DESTROY_CHANNEL, noDataPacketStructure, (data) => {
+    const { id } = data
+    getThreeJsRendererMethods()?.destroyMedia(id)
+  }, true)
 
   // Handle media add
   registerChannel(ADD_CHANNEL, addPacketStructure, (data) => {
@@ -207,42 +224,6 @@ const registerMediaChannels = () => {
     })
   })
 
-  // Handle media play
-  registerChannel(PLAY_CHANNEL, noDataPacketStructure, (data) => {
-    const { id } = data
-    getThreeJsRendererMethods()?.setVideoPlaying(id, true)
-  }, true)
-
-  // Handle media pause
-  registerChannel(PAUSE_CHANNEL, noDataPacketStructure, (data) => {
-    const { id } = data
-    getThreeJsRendererMethods()?.setVideoPlaying(id, false)
-  }, true)
-
-  // Handle media seek
-  registerChannel(SEEK_CHANNEL, setNumberPacketStructure, (data) => {
-    const { id, seconds } = data
-    getThreeJsRendererMethods()?.setVideoSeeking(id, seconds)
-  }, true)
-
-  // Handle media destroy
-  registerChannel(DESTROY_CHANNEL, noDataPacketStructure, (data) => {
-    const { id } = data
-    getThreeJsRendererMethods()?.destroyMedia(id)
-  }, true)
-
-  // Handle media volume
-  registerChannel(VOLUME_CHANNEL, setNumberPacketStructure, (data) => {
-    const { id, volume } = data
-    getThreeJsRendererMethods()?.setVideoVolume(id, volume)
-  }, true)
-
-  // Handle media speed
-  registerChannel(SPEED_CHANNEL, setNumberPacketStructure, (data) => {
-    const { id, speed } = data
-    getThreeJsRendererMethods()?.setVideoSpeed(id, speed)
-  }, true)
-
   // ---
 
   // Video interaction channel
@@ -258,13 +239,40 @@ const registerMediaChannels = () => {
 
   bot._client.registerChannel(MEDIA_INTERACTION_CHANNEL, interactionPacketStructure, true)
 
+  // Media play channel
+  bot._client.registerChannel(MEDIA_PLAY_CHANNEL_CLIENTBOUND, noDataPacketStructure, true)
+  const mediaStopPacketStructure = [
+    'container',
+    [
+      { name: 'id', type: ['pstring', { countType: 'i16' }] },
+      // ended - emitted even when loop is true (will continue playing)
+      // error: ...
+      // stalled - connection drops, server stops sending data
+      // waiting - connection is slow, server is sending data, but not fast enough (buffering)
+      // control
+      { name: 'reason', type: ['pstring', { countType: 'i16' }] },
+      { name: 'time', type: 'f32' }
+    ]
+  ]
+  bot._client.registerChannel(MEDIA_STOP_CHANNEL_CLIENTBOUND, mediaStopPacketStructure, true)
+
   console.debug('Registered media channels')
 }
 
 const MEDIA_INTERACTION_CHANNEL = 'minecraft-web-client:media-interaction'
+const MEDIA_PLAY_CHANNEL_CLIENTBOUND = 'minecraft-web-client:media-play'
+const MEDIA_STOP_CHANNEL_CLIENTBOUND = 'minecraft-web-client:media-stop'
 
 export const sendVideoInteraction = (id: string, x: number, y: number, isRightClick: boolean) => {
   bot._client.writeChannel(MEDIA_INTERACTION_CHANNEL, { id, x, y, isRightClick })
+}
+
+export const sendVideoPlay = (id: string) => {
+  bot._client.writeChannel(MEDIA_PLAY_CHANNEL_CLIENTBOUND, { id })
+}
+
+export const sendVideoStop = (id: string, reason: string, time: number) => {
+  bot._client.writeChannel(MEDIA_STOP_CHANNEL_CLIENTBOUND, { id, reason, time })
 }
 
 export const videoCursorInteraction = () => {

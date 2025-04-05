@@ -53,7 +53,7 @@ function setSectionDirty (pos, value = true) {
   const key = sectionKey(x, y, z)
   if (!value) {
     dirtySections.delete(key)
-    postMessage({ type: 'sectionFinished', key })
+    postMessage({ type: 'sectionFinished', key, workerIndex })
     return
   }
 
@@ -61,7 +61,7 @@ function setSectionDirty (pos, value = true) {
   if (chunk?.getSection(pos)) {
     dirtySections.set(key, (dirtySections.get(key) || 0) + 1)
   } else {
-    postMessage({ type: 'sectionFinished', key })
+    postMessage({ type: 'sectionFinished', key, workerIndex })
   }
 }
 
@@ -143,6 +143,13 @@ const handleMessage = data => {
     }
     case 'webgpuData': {
       world.setDataForWebgpuRenderer(data.data)
+      break
+    }
+    case 'getCustomBlockModel': {
+      const pos = new Vec3(data.pos.x, data.pos.y, data.pos.z)
+      const chunkKey = `${Math.floor(pos.x / 16) * 16},${Math.floor(pos.z / 16) * 16}`
+      const customBlockModel = world.customBlockModels.get(chunkKey)?.[`${pos.x},${pos.y},${pos.z}`]
+      global.postMessage({ type: 'customBlockModel', chunkKey, customBlockModel })
       break
     }
   }

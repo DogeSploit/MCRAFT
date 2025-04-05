@@ -26,8 +26,10 @@ export type WorldDataEmitterEvents = {
   listening: () => void
   markAsLoaded: (data: { x: number, z: number }) => void
   unloadChunk: (data: { x: number, z: number }) => void
-  loadChunk: (data: { x: number, z: number, chunk: any, blockEntities: any, worldConfig: any, isLightUpdate: boolean }) => void
+  loadChunk: (data: { x: number, z: number, chunk: string, blockEntities: any, worldConfig: any, isLightUpdate: boolean }) => void
   updateLight: (data: { pos: Vec3 }) => void
+  onWorldSwitch: () => void
+  end: () => void
 }
 
 /**
@@ -120,7 +122,13 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
       },
       time: () => {
         this.emitter.emit('time', bot.time.timeOfDay)
-      }
+      },
+      respawn: () => {
+        this.emitter.emit('onWorldSwitch')
+      },
+      end: () => {
+        this.emitter.emit('end')
+      },
     } satisfies Partial<BotEvents>
 
 
@@ -151,7 +159,12 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
 
     for (const id in bot.entities) {
       const e = bot.entities[id]
-      emitEntity(e)
+      try {
+        emitEntity(e)
+      } catch (err) {
+        // reportError?.(err)
+        console.error('error processing entity', err)
+      }
     }
 
     void this.init(bot.entity.position)
