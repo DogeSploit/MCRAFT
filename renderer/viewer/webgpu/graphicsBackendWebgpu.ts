@@ -27,7 +27,7 @@ const createWebgpuBackend = (initOptions: WebgpuInitOptions) => {
       await worldRenderer.readyPromise
     },
     disconnect () {
-
+      worldRenderer?.destroy()
     },
     soundSystem: undefined,
     setRendering (rendering) {

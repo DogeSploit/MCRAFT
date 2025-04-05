@@ -61,6 +61,20 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
     if (this.worker instanceof Worker) {
       this.worker.terminate()
     }
+
+    // Clean up canvas
+    const canvas = document.getElementById('viewer-canvas')
+    if (canvas) {
+      canvas.remove()
+    }
+
+    // Clean up problem reporter
+    const problemReporter = document.querySelector('.renderer-problem-reporter')
+    if (problemReporter) {
+      problemReporter.remove()
+    }
+
+    super.destroy()
   }
 
   getPlaceholderChannel () {
