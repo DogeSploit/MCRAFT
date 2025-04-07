@@ -93,6 +93,7 @@ import { createFullScreenProgressReporter, ProgressReporter } from './core/progr
 import { appViewer } from './appViewer'
 import { destroyLocalServerMain, startLocalServerMain } from './integratedServer/main'
 import './appViewerLoad'
+import { registerOpenBenchmarkListener } from './benchmark'
 
 window.debug = debug
 window.beforeRenderFrame = []
@@ -116,13 +117,22 @@ function hideCurrentScreens () {
   insertActiveModalStack('', [])
 }
 
-const loadSingleplayer = (serverOverrides = {}, flattenedServerOverrides = {}) => {
+const loadSingleplayer = (serverOverrides = {}, flattenedServerOverrides = {}, connectOptions?: Partial<ConnectOptions>) => {
   const serverSettingsQsRaw = appQueryParamsArray.serverSetting ?? []
   const serverSettingsQs = serverSettingsQsRaw.map(x => x.split(':')).reduce<Record<string, string>>((acc, [key, value]) => {
     acc[key] = JSON.parse(value)
     return acc
   }, {})
-  void connect({ singleplayer: true, username: options.localUsername, serverOverrides, serverOverridesFlat: { ...flattenedServerOverrides, ...serverSettingsQs } })
+  void connect({
+    singleplayer: true,
+    username: options.localUsername,
+    serverOverrides,
+    serverOverridesFlat: {
+      ...flattenedServerOverrides,
+      ...serverSettingsQs
+    },
+    ...connectOptions
+  })
 }
 function listenGlobalEvents () {
   window.addEventListener('connect', e => {
@@ -130,7 +140,9 @@ function listenGlobalEvents () {
     void connect(options)
   })
   window.addEventListener('singleplayer', (e) => {
-    loadSingleplayer((e as CustomEvent).detail)
+    const { detail } = (e as CustomEvent)
+    const { connectOptions, ...rest } = detail
+    loadSingleplayer(rest, {}, connectOptions)
   })
 }
 
@@ -344,6 +356,7 @@ export async function connect (connectOptions: ConnectOptions) {
       // flying-squid: 'login' -> player.login -> now sends 'login' event to the client (handled in many plugins in mineflayer) -> then 'update_health' is sent which emits 'spawn' in mineflayer
 
       CustomClient = (await startLocalServerMain(serverOptions)).CustomClient
+      connectOptions?.connectEvents?.serverCreated?.()
       // // todo need just to call quit if started
       // // loadingScreen.maybeRecoverable = false
       // // init world, todo: do it for any async plugins
@@ -640,13 +653,15 @@ export async function connect (connectOptions: ConnectOptions) {
     setLoadingScreenStatus('Loading world')
   })
 
-  const loadStart = Date.now()
   let worldWasReady = false
   const waitForChunksToLoad = async (progress?: ProgressReporter) => {
     await new Promise<void>(resolve => {
+      if (worldWasReady) {
+        resolve()
+        return
+      }
       const unsub = subscribe(appViewer.rendererState, () => {
-        if (worldWasReady) return
-        if (appViewer.rendererState.world.allChunksLoaded) {
+        if (appViewer.rendererState.world.allChunksLoaded && appViewer.nonReactiveState.world.chunksTotalNumber) {
           worldWasReady = true
           resolve()
           unsub()
@@ -657,11 +672,6 @@ export async function connect (connectOptions: ConnectOptions) {
       })
     })
   }
-
-  void waitForChunksToLoad().then(() => {
-    console.log('All chunks done and ready! Time from renderer connect to ready', (Date.now() - loadStart) / 1000, 's')
-    document.dispatchEvent(new Event('cypress-world-ready'))
-  })
 
   const spawnEarlier = !singleplayer && !p2pMultiplayer
   const displayWorld = async () => {
@@ -675,10 +685,17 @@ export async function connect (connectOptions: ConnectOptions) {
       })
       await appViewer.resourcesManager.promiseAssetsReady
     }
-    console.log('try to focus window')
-    window.focus?.()
     errorAbortController.abort()
     if (appStatusState.isError) return
+
+    const loadWorldStart = Date.now()
+    console.log('try to focus window')
+    window.focus?.()
+    void waitForChunksToLoad().then(() => {
+      window.worldLoadTime = (Date.now() - loadWorldStart) / 1000
+      console.log('All chunks done and ready! Time from renderer connect to ready', (Date.now() - loadWorldStart) / 1000, 's')
+      document.dispatchEvent(new Event('cypress-world-ready'))
+    })
 
     try {
       if (p2pConnectTimeout) clearTimeout(p2pConnectTimeout)
@@ -687,7 +704,7 @@ export async function connect (connectOptions: ConnectOptions) {
       progress.setMessage('Placing blocks (starting viewer)')
       if (!connectOptions.worldStateFileContents || connectOptions.worldStateFileContents.length < 3 * 1024 * 1024) {
         localStorage.lastConnectOptions = JSON.stringify(connectOptions)
-        if (process.env.NODE_ENV === 'development' && !localStorage.lockUrl && !Object.keys(window.debugQueryParams).length) {
+        if (process.env.NODE_ENV === 'development' && !localStorage.lockUrl && !location.search.slice(1).length) {
           lockUrl()
         }
       } else {
@@ -927,7 +944,7 @@ if (!reconnectOptions) {
     }
   }, (err) => {
     console.error(err)
-    alert(`Failed to download file: ${err}`)
+    alert(`Something went wrong: ${err}`)
   })
 }
 
@@ -940,3 +957,4 @@ if (initialLoader) {
 window.pageLoaded = true
 
 void possiblyHandleStateVariable()
+registerOpenBenchmarkListener()

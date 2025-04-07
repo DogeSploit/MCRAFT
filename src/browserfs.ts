@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import { join } from 'path'
 import * as browserfs from 'browserfs'
+import { ConnectOptions } from 'src/connect'
 import { resetOptions } from './optionsStorage'
 
 import { fsState, loadSave } from './loadSave'
@@ -136,7 +137,7 @@ export const openWorldFromHttpDir = async (fileDescriptorUrls: string[]/*  | und
   await loadSave()
 }
 
-const openWorldZipInner = async (file: File | ArrayBuffer, name = file['name']) => {
+const openWorldZipInner = async (file: File | ArrayBuffer, name = file['name'], connectOptions?: Partial<ConnectOptions>) => {
   // await new Promise<void>(async resolve => {
   //   browserfs.configure({
   //     // todo
@@ -181,7 +182,7 @@ const openWorldZipInner = async (file: File | ArrayBuffer, name = file['name']) 
     }
 
     if (availableWorlds.length === 1) {
-      await loadSave(`/world/${availableWorlds[0]}`)
+      await loadSave(`/world/${availableWorlds[0]}`, connectOptions)
       return
     }
 
