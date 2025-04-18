@@ -208,6 +208,13 @@ const appConfig = defineConfig({
                             if (singleBuildFiles.length !== 1 || singleBuildFiles[0] !== 'index.html') {
                                 throw new Error('Single file build must only have index.html in the dist/single folder. Ensure workers are imported & built correctly.')
                             }
+                            // check if dist/static/js/async is empty
+                            if (fs.existsSync('./dist/static/js/async')) {
+                                const asyncFiles = fs.readdirSync('./dist/static/js/async')
+                                if (asyncFiles.length > 0) {
+                                    throw new Error('dist/static/js/async must be empty. Ensure workers are imported & built correctly.')
+                                }
+                            }
 
                             // process index.html
                             const singleBuildHtml = './dist/single/index.html'
@@ -224,8 +231,9 @@ const appConfig = defineConfig({
                             // write output file size
                             console.log('single file size', (fs.statSync(singleBuildHtml).size / 1024 / 1024).toFixed(2), 'mb')
                         } else {
+                            patchWorkerImport()
                             if (!disableServiceWorker) {
-                            const { count, size, warnings } = await generateSW({
+                                const { count, size, warnings } = await generateSW({
                                     // dontCacheBustURLsMatching: [new RegExp('...')],
                                     globDirectory: 'dist',
                                     skipWaiting: true,
@@ -254,3 +262,21 @@ export default mergeRsbuildConfig(
     appAndRendererSharedConfig(),
     appConfig
 )
+
+const patchWorkerImport = () => {
+    const workerFiles = fs.readdirSync('./dist/static/js/async').filter(x => x.endsWith('.js'))
+    let patched = false
+    for (const file of workerFiles) {
+        const filePath = `./dist/static/js/async/${file}`
+        const content = fs.readFileSync(filePath, 'utf8')
+        const matches = content.match(/importScripts\([^)]+\)/g) || []
+        if (matches.length > 1) throw new Error('Multiple importScripts found in ' + filePath)
+        const newContent = content.replace(/importScripts\(\w+\.\w+/,
+            "importScripts(location.pathname.split('/').slice(0, -4).join('/')+'/'")
+        if (newContent !== content) {
+            fs.writeFileSync(filePath, newContent, 'utf8')
+            patched = true
+        }
+    }
+    if (!patched) throw new Error('No importScripts found in any worker files')
+}

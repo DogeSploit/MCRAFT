@@ -17,8 +17,6 @@ import './mineflayer/timers'
 import { getServerInfo } from './mineflayer/mc-protocol'
 import { onGameLoad } from './inventoryWindows'
 import initCollisionShapes from './getCollisionInteractionShapes'
-import protocolMicrosoftAuth from 'minecraft-protocol/src/client/microsoftAuth'
-import microsoftAuthflow from './microsoftAuthflow'
 import { Duplex } from 'stream'
 
 import './scaleInterface'
@@ -75,7 +73,7 @@ import { saveToBrowserMemory } from './react/PauseScreen'
 import './devReload'
 import './water'
 import { ConnectOptions, loadMinecraftData, getVersionAutoSelect, downloadOtherGameData, downloadAllMinecraftData } from './connect'
-import { ref, subscribe } from 'valtio'
+import { subscribe } from 'valtio'
 import { signInMessageState } from './react/SignInMessageProvider'
 import { updateAuthenticatedAccountData, updateLoadedServerData, updateServerConnectionHistory } from './react/serversStorage'
 import packetsPatcher from './mineflayer/plugins/packetsPatcher'
@@ -97,6 +95,7 @@ import { createConsoleLogProgressReporter, createFullScreenProgressReporter, Pro
 import { appViewer } from './appViewer'
 import './appViewerLoad'
 import { registerOpenBenchmarkListener } from './benchmark'
+import { getProtocolClientGetter } from './protocolWorker/protocolMain'
 import { tryHandleBuiltinCommand } from './builtinCommands'
 
 window.debug = debug
@@ -162,11 +161,6 @@ export async function connect (connectOptions: ConnectOptions) {
       }
     })
   }
-  if (sessionStorage.delayLoadUntilClick) {
-    await new Promise(resolve => {
-      window.addEventListener('click', resolve)
-    })
-  }
 
   miscUiState.hasErrors = false
   lastConnectOptions.value = connectOptions
@@ -184,8 +178,8 @@ export async function connect (connectOptions: ConnectOptions) {
 
   const { renderDistance: renderDistanceSingleplayer, multiplayerRenderDistance } = options
 
-  const parsedServer = parseServerAddress(connectOptions.server)
-  const server = { host: parsedServer.host, port: parsedServer.port }
+  const serverParsed = parseServerAddress(connectOptions.server)
+  const server = { host: serverParsed.host, port: serverParsed.port }
   if (connectOptions.proxy?.startsWith(':')) {
     connectOptions.proxy = `${location.protocol}//${location.hostname}${connectOptions.proxy}`
   }
@@ -193,12 +187,12 @@ export async function connect (connectOptions: ConnectOptions) {
     const https = connectOptions.proxy.startsWith('https://') || location.protocol === 'https:'
     connectOptions.proxy = `${connectOptions.proxy}:${https ? 443 : 80}`
   }
-  const parsedProxy = parseServerAddress(connectOptions.proxy, false)
-  const proxy = { host: parsedProxy.host, port: parsedProxy.port }
+  const proxyParsed = parseServerAddress(connectOptions.proxy, false)
+  const proxy = { host: proxyParsed.host, port: proxyParsed.port }
   let { username } = connectOptions
 
   if (connectOptions.server) {
-    console.log(`connecting to ${server.host}:${server.port ?? 25_565}`)
+    console.log(`connecting to ${serverParsed.serverIpFull}`)
   }
   console.log('using player username', username)
 
@@ -242,14 +236,13 @@ export async function connect (connectOptions: ConnectOptions) {
       })
     }
   }
-  let lastPacket = undefined as string | undefined
+  const lastPacket = undefined as string | undefined
   const onPossibleErrorDisconnect = () => {
     if (lastPacket && bot?._client && bot._client.state !== states.PLAY) {
       appStatusState.descriptionHint = `Last Server Packet: ${lastPacket}`
     }
   }
   const handleError = (err) => {
-    console.error(err)
     if (err === 'ResizeObserver loop completed with undelivered notifications.') {
       return
     }
@@ -287,16 +280,14 @@ export async function connect (connectOptions: ConnectOptions) {
 
   let clientDataStream: Duplex | undefined
 
-  if (connectOptions.server && !connectOptions.viewerWsConnect && !parsedServer.isWebSocket) {
+  if (connectOptions.server && !connectOptions.viewerWsConnect && !serverParsed.isWebSocket) {
     console.log(`using proxy ${proxy.host}:${proxy.port || location.port}`)
     net['setProxy']({ hostname: proxy.host, port: proxy.port, headers: { Authorization: `Bearer ${new URLSearchParams(location.search).get('token') ?? ''}` } })
   }
 
   const renderDistance = singleplayer ? renderDistanceSingleplayer : multiplayerRenderDistance
-  let updateDataAfterJoin = () => { }
   let localServer
   let localReplaySession: ReturnType<typeof startLocalReplayServer> | undefined
-  let lastKnownKickReason = undefined as string | undefined
   try {
     const serverOptions = defaultsDeep({}, connectOptions.serverOverrides ?? {}, options.localServerOptions, defaultServerOptions)
     Object.assign(serverOptions, connectOptions.serverOverridesFlat ?? {})
@@ -415,30 +406,12 @@ export async function connect (connectOptions: ConnectOptions) {
     }
     setLoadingScreenStatus(initialLoadingText)
 
-    if (parsedServer.isWebSocket) {
-      clientDataStream = (await getWebsocketStream(server.host)).mineflayerStream
-    }
-
-    let newTokensCacheResult = null as any
-    const cachedTokens = typeof connectOptions.authenticatedAccount === 'object' ? connectOptions.authenticatedAccount.cachedTokens : {}
-    const authData = connectOptions.authenticatedAccount ? await microsoftAuthflow({
-      tokenCaches: cachedTokens,
-      proxyBaseUrl: connectOptions.proxy,
-      setProgressText (text) {
-        setLoadingScreenStatus(text)
-      },
-      setCacheResult (result) {
-        newTokensCacheResult = result
-      },
-      connectingServer: server.host
-    }) : undefined
-
     if (p2pMultiplayer) {
       clientDataStream = await connectToPeer(connectOptions.peerId!, connectOptions.peerOptions)
     }
     if (connectOptions.viewerWsConnect) {
       const { version, time, requiresPass } = await getViewerVersionData(connectOptions.viewerWsConnect)
-      let password
+      let password: string | null = null
       if (requiresPass) {
         password = prompt('Enter password')
         if (!password) {
@@ -463,6 +436,8 @@ export async function connect (connectOptions: ConnectOptions) {
     }
 
     const brand = clientDataStream ? 'minecraft-web-client' : undefined
+    const createClient = await getProtocolClientGetter(proxy, connectOptions, serverParsed)
+
     bot = mineflayer.createBot({
       host: server.host,
       port: server.port ? +server.port : undefined,
@@ -483,53 +458,13 @@ export async function connect (connectOptions: ConnectOptions) {
         connect () { },
         Client: CustomChannelClient as any,
       } : {},
-      onMsaCode (data) {
-        signInMessageState.code = data.user_code
-        signInMessageState.link = data.verification_uri
-        signInMessageState.expiresOn = Date.now() + data.expires_in * 1000
-      },
-      sessionServer: authData?.sessionEndpoint?.toString(),
-      auth: connectOptions.authenticatedAccount ? async (client, options) => {
-        authData!.setOnMsaCodeCallback(options.onMsaCode)
-        authData?.setConnectingVersion(client.version)
-        //@ts-expect-error
-        client.authflow = authData!.authFlow
-        try {
-          signInMessageState.abortController = ref(new AbortController())
-          await Promise.race([
-            protocolMicrosoftAuth.authenticate(client, options),
-            new Promise((_r, reject) => {
-              signInMessageState.abortController.signal.addEventListener('abort', () => {
-                reject(new UserError('Aborted by user'))
-              })
-            })
-          ])
-          if (signInMessageState.shouldSaveToken) {
-            updateAuthenticatedAccountData(accounts => {
-              const existingAccount = accounts.find(a => a.username === client.username)
-              if (existingAccount) {
-                existingAccount.cachedTokens = { ...existingAccount.cachedTokens, ...newTokensCacheResult }
-              } else {
-                accounts.push({
-                  username: client.username,
-                  cachedTokens: { ...cachedTokens, ...newTokensCacheResult }
-                })
-              }
-              return accounts
-            })
-            updateDataAfterJoin = () => {
-              updateLoadedServerData(s => ({ ...s, authenticatedAccountOverride: client.username }), connectOptions.serverIndex)
-            }
-          } else {
-            updateDataAfterJoin = () => {
-              updateLoadedServerData(s => ({ ...s, authenticatedAccountOverride: undefined }), connectOptions.serverIndex)
-            }
-          }
-          setLoadingScreenStatus('Authentication successful. Logging in to server')
-        } finally {
-          signInMessageState.code = ''
+      get client () {
+        if (clientDataStream || singleplayer || p2pMultiplayer || localReplaySession || connectOptions.viewerWsConnect || (!options.protocolWorkerOptimisation && !serverParsed.isWebSocket)) {
+          return undefined
         }
-      } : undefined,
+        return createClient.call(this)
+      },
+      // auth: connectOptions.authenticatedAccount ?  : undefined,
       username,
       viewDistance: renderDistance,
       checkTimeoutInterval: 240 * 1000,
@@ -562,50 +497,6 @@ export async function connect (connectOptions: ConnectOptions) {
     } else if (clientDataStream) {
       // bot.emit('inject_allowed')
       bot._client.emit('connect')
-    } else {
-      const setupConnectHandlers = () => {
-        Socket.prototype['handleStringMessage'] = function (message: string) {
-          if (message.startsWith('proxy-message') || message.startsWith('proxy-command:')) { // for future
-            return false
-          }
-          if (message.startsWith('proxy-shutdown:')) {
-            lastKnownKickReason = message.slice('proxy-shutdown:'.length)
-            return false
-          }
-          return true
-        }
-        bot._client.socket.on('connect', () => {
-          console.log('Proxy WebSocket connection established')
-          //@ts-expect-error
-          bot._client.socket._ws.addEventListener('close', () => {
-            console.log('WebSocket connection closed')
-            setTimeout(() => {
-              if (bot) {
-                bot.emit('end', 'WebSocket connection closed with unknown reason')
-              }
-            }, 1000)
-          })
-          bot._client.socket.on('close', () => {
-            setTimeout(() => {
-              if (bot) {
-                bot.emit('end', 'WebSocket connection closed with unknown reason')
-              }
-            })
-          })
-        })
-      }
-      // socket setup actually can be delayed because of dns lookup
-      if (bot._client.socket) {
-        setupConnectHandlers()
-      } else {
-        const originalSetSocket = bot._client.setSocket.bind(bot._client)
-        bot._client.setSocket = (socket) => {
-          if (!bot) return
-          originalSetSocket(socket)
-          setupConnectHandlers()
-        }
-      }
-
     }
   } catch (err) {
     handleError(err)
@@ -641,7 +532,7 @@ export async function connect (connectOptions: ConnectOptions) {
   })
 
   const packetBeforePlay = (_, __, ___, fullBuffer) => {
-    lastPacket = fullBuffer.toString()
+    // lastPacket = fullBuffer.toString()
   }
   bot._client.on('packet', packetBeforePlay as any)
   const playStateSwitch = (newState) => {
@@ -654,9 +545,6 @@ export async function connect (connectOptions: ConnectOptions) {
   bot.on('end', (endReason) => {
     if (ended) return
     console.log('disconnected for', endReason)
-    if (endReason === 'socketClosed') {
-      endReason = lastKnownKickReason ?? 'Connection with proxy server lost'
-    }
     // close all modals
     for (const modal of activeModalStack) {
       hideModal(modal)
@@ -732,7 +620,6 @@ export async function connect (connectOptions: ConnectOptions) {
         localStorage.removeItem('lastConnectOptions')
       }
       connectOptions.onSuccessfulPlay?.()
-      updateDataAfterJoin()
       if (connectOptions.autoLoginPassword) {
         setTimeout(() => {
           bot.chat(`/login ${connectOptions.autoLoginPassword}`)
