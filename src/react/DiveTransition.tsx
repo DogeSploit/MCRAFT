@@ -5,7 +5,7 @@ import styles from './DiveTransition.module.css'
 const durationInSeconds = 0.3
 const durationInMs = durationInSeconds * 1000
 
-export default ({ children, open }) => {
+export default ({ children, open, isError = false }) => {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -26,13 +26,12 @@ export default ({ children, open }) => {
   if (!mounted) return null
 
   return (
-    <AnimatePresence>
+    <AnimatePresence initial={false}>
       {open && (
         <div className={styles.container}>
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={false}
+            exit={isError ? undefined : { opacity: 0 }}
             transition={{ duration: durationInSeconds }}
             className={styles.main}
           >
