@@ -211,7 +211,7 @@ const ModSidebar = ({ mod }: { mod: (ModsData['repos'][0]['packages'][0] & { rep
                 return [field.field, {
                   type: 'button' as const,
                   label: field.label,
-                  onButtonClick() {
+                  onButtonClick () {
                     setEditingField({
                       name: field.field,
                       content: field.getContent?.() || mod.installed![field.field] || '',
@@ -493,3 +493,5 @@ export default () => {
     </div>
   </Screen>
 }
+
+/* eslint-disable object-shorthand */
