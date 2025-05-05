@@ -149,7 +149,7 @@ export default ({ onBack, onConfirm, title = 'Add a Server', initialData, parseQ
       }}
       >
         {!lockConnect && <>
-          <div style={{ gridColumn: smallWidth ? '' : 'span 2', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <InputWithLabel label="Server Name" value={serverName} onChange={({ target: { value } }) => setServerName(value)} placeholder='Defaults to IP' />
           </div>
         </>}
