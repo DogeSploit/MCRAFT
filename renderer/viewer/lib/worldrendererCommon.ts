@@ -103,8 +103,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
   ONMESSAGE_TIME_LIMIT = 30 // ms
 
   handleResize = () => { }
-  highestBlocksByChunks = {} as Record<string, { [chunkKey: string]: HighestBlockInfo }>
-  highestBlocksBySections = {} as Record<string, { [sectionKey: string]: HighestBlockInfo }>
+  highestBlocksByChunks = new Map<string, { [chunkKey: string]: HighestBlockInfo }>()
+  highestBlocksBySections = new Map<string, { [sectionKey: string]: HighestBlockInfo }>()
   blockEntities = {}
 
   workersProcessAverageTime = 0
@@ -247,7 +247,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
   }
 
   async getHighestBlocks (chunkKey: string) {
-    return this.highestBlocksByChunks[chunkKey]
+    return this.highestBlocksByChunks.get(chunkKey)
   }
 
   updateCustomBlock (chunkKey: string, blockPos: string, model: string) {
@@ -664,9 +664,9 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     for (let y = this.worldSizeParams.minY; y < this.worldSizeParams.worldHeight; y += 16) {
       this.setSectionDirty(new Vec3(x, y, z), false)
       delete this.finishedSections[`${x},${y},${z}`]
-      delete this.highestBlocksBySections[`${x},${y},${z}`]
+      this.highestBlocksBySections.delete(`${x},${y},${z}`)
     }
-    delete this.highestBlocksByChunks[`${x},${z}`]
+    this.highestBlocksByChunks.delete(`${x},${z}`)
 
     this.updateChunksStats()
 
@@ -992,7 +992,6 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.active = false
 
     this.renderUpdateEmitter.removeAllListeners()
-    this.displayOptions.worldView.removeAllListeners() // todo
     this.abortController.abort()
     removeAllStats()
   }
