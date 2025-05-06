@@ -14,7 +14,6 @@ export default () => {
   const { touchInteractionType } = useSnapshot(options)
   const [hintText, setHintText] = useState<string | null>(null)
   const [entityName, setEntityName] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<string>('No entity detected')
 
   useEffect(() => {
     const update = () => {
@@ -22,18 +21,15 @@ export default () => {
       if (videoInteraction) {
         setHintText(`Interact with video`)
         setEntityName(null)
-        setDebugInfo('Video interaction')
       } else {
         const cursorState = bot.mouse.getCursorState()
         if (cursorState.entity) {
           const name = cursorState.entity.displayName ?? cursorState.entity.name ?? 'Entity'
           setHintText(`Attack ${name}`)
           setEntityName(name)
-          setDebugInfo(`Entity detected: ${name}`)
         } else {
           setHintText(null)
           setEntityName(null)
-          setDebugInfo('No entity detected')
         }
       }
     }
@@ -63,15 +59,13 @@ export default () => {
   if (!hintText && !entityName) return null
 
   return (
-    <div className={`${styles.hint_container} interaction-hint`} style={{ pointerEvents: 'none' }}>
+    <div className={`${styles.hint_container} interaction-hint`}>
       <PixelartIcon iconName={pixelartIcons['sun-alt']} width={14} />
-      <span className={styles.hint_text}>{usingTouch ? `Touch: ${touchInteractionType}, Entity: ${debugInfo}` : 'Touch disabled'}</span>
+      <span className={styles.hint_text}>{hintText}</span>
       <Button
-        className={styles.use_button}
         onClick={handleUseButtonClick}
-        style={{ pointerEvents: 'auto' }}
       >
-        Use {entityName || ''}
+        {entityName}
       </Button>
     </div>
   )
