@@ -49,7 +49,6 @@ export default () => {
     e.preventDefault()
     e.stopPropagation()
 
-    // Правая кнопка мыши (код 2)
     document.dispatchEvent(new MouseEvent('mousedown', { button: 2 }))
     bot.mouse.update()
     document.dispatchEvent(new MouseEvent('mouseup', { button: 2 }))
