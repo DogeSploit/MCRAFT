@@ -159,7 +159,7 @@ export default ({ onBack, onConfirm, title = 'Add a Server', initialData, parseQ
             setServerOnline(false)
           }}
           validateInput={serverOnline === null || fetchedServerInfoIp !== serverIp ? undefined : validateServerIp}
-          placeholder="IP address (e.g. 192.168.0.82:25566)"
+          placeholder="example.com:25565"
         />
         {!lockConnect && <>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
