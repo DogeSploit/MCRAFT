@@ -85,6 +85,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     dirty (pos: Vec3, value: boolean): void
     update (/* pos: Vec3, value: boolean */): void
     chunkFinished (key: string): void
+    heightmap (key: string, heightmap: Uint8Array): void
   }>
   customTexturesDataUrl = undefined as string | undefined
   workers: any[] = []
@@ -442,6 +443,11 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         this.blockStateModelInfo.set(cacheKey, info)
       }
     }
+
+    if (data.type == 'heightmap') {
+      console.log('[worldrendererCommon] received heightmap for', data.key, data.heightmap)
+      appViewer.rendererState.world.heightmaps.set(data.key, new Uint8Array(data.heighmap))
+    }
   }
 
   downloadMesherLog () {
@@ -628,6 +634,11 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         customBlockModels: customBlockModels || undefined
       })
     }
+    this.workers[0].postMessage({
+      type: 'getHeightmap',
+      x,
+      z,
+    })
     this.logWorkerWork(() => `-> chunk ${JSON.stringify({ x, z, chunkLength: chunk.length, customBlockModelsLength: customBlockModels ? Object.keys(customBlockModels).length : 0 })}`)
     this.mesherLogReader?.chunkReceived(x, z, chunk.length)
     for (let y = this.worldMinYRender; y < this.worldSizeParams.worldHeight; y += 16) {

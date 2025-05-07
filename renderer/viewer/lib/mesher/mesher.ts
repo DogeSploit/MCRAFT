@@ -18,10 +18,6 @@ let workerIndex = 0
 let world: World
 let dirtySections = new Map<string, number>()
 let allDataReady = false
-type HighestBlockInfo = { y: number, stateId: number | undefined, biomeId: number | undefined }
-const heightmaps = new Map<string, Map<string, HighestBlockInfo>>()
-const finishedSections = new Set<string>()
-const finishedChunks = new Set<string>()
 
 function sectionKey (x, y, z) {
   return `${x},${y},${z}`
@@ -152,6 +148,29 @@ const handleMessage = data => {
       global.postMessage({ type: 'customBlockModel', chunkKey, customBlockModel })
       break
     }
+    case 'getHeightmap': {
+      const heightmap = new Uint8Array(256)
+
+      const blockPos = new Vec3(0, 0, 0)
+      for (let z=0; z<16; z++) {
+        for (let x=0; x<16; x++) {
+          const blockX = x + data.x
+          const blockZ = z + data.z
+          blockPos.x = blockX; blockPos.z = blockZ; 
+          blockPos.y = 256
+          let block = world.getBlock(blockPos)
+          while (block?.name.includes('air')) {
+            blockPos.y -= 1
+            block = world.getBlock(blockPos)
+          }
+          const index = z * 16 + x
+          heightmap[index] = block ? blockPos.y : 0
+        }
+      }
+      postMessage({ type: 'heightmap', key: `${data.x},${data.z}`, heightmap })
+
+      break
+    }
   // No default
   }
 }
@@ -165,39 +184,6 @@ self.onmessage = ({ data }) => {
   }
 
   handleMessage(data)
-}
-
-const updateHeightmaps = (sectionKey: string, highestBlocks: Map<string,  HighestBlockInfo >): void | string => {
-  if (workerIndex !== 1) return
-
-  const chunkCoords = sectionKey.split(',').map(Number)
-  const chunkKey = `${chunkCoords[0]},${chunkCoords[2]}`
-  for (let x = 0; x < 16; x++) {
-    for (let z = 0; z < 16; z++) {
-      const posInsideKey = `${chunkCoords[0] + x},${chunkCoords[2] + z}`
-      const highestBlock = highestBlocks.get(posInsideKey)
-      if (!highestBlock) continue
-
-      if (!heightmaps.get(chunkKey)) {
-        heightmaps.set(chunkKey, new Map())
-      }
-      heightmaps.get(chunkKey)!.set(posInsideKey, highestBlock)
-    }
-  }
-
-  let loaded = true
-  // todo: use actual world minY and height
-  for (let y = 0; y < 192; y += 16) {
-    const key = `${chunkCoords[0]},${y},${chunkCoords[2]}`
-    console.log('[mesher] section', key)
-    if (!finishedSections.has(key)) {
-      loaded = false
-      break
-    }
-  }
-  if (loaded) {
-    return `${chunkCoords[0]},${chunkCoords[2]}`
-  }
 }
 
 setInterval(() => {
@@ -215,13 +201,6 @@ setInterval(() => {
       const start = performance.now()
       const geometry = getSectionGeometry(x, y, z, world)
       const transferable = [geometry.positions?.buffer, geometry.normals?.buffer, geometry.colors?.buffer, geometry.uvs?.buffer].filter(Boolean)
-      finishedSections.add(key)
-      const finishedChunkKey = updateHeightmaps(key, geometry.highestBlocks)
-      if (finishedChunkKey) {
-        console.log('[mesher] finishedChunk', finishedChunkKey, heightmaps.get(finishedChunkKey))
-      } else {
-        // console.log('[mesher] did not finish chunk of section', key)
-      }
       //@ts-expect-error
       postMessage({ type: 'geometry', key, geometry, workerIndex }, transferable)
       processTime = performance.now() - start
@@ -235,9 +214,6 @@ setInterval(() => {
       processTime = 0
     }
     dirtySections.delete(key)
-    for (const [key, heightmap] of heightmaps.entries()) {
-      postMessage({ type: 'chunkHeightmap', key, heightmap })
-    }
   }
 
   // Send new block state model info if any

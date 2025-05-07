@@ -4,6 +4,7 @@ export const getDefaultRendererState = (): RendererReactiveState => {
   return {
     world: {
       chunksLoaded: [],
+      heightmaps: new Map(),
       chunksTotalNumber: 0,
       allChunksLoaded: true,
       mesherWork: false,
