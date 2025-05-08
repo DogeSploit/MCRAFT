@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@nxg-org/mineflayer-physics-util': 1.8.7
+  '@nxg-org/mineflayer-physics-util': latest
   buffer: ^6.0.3
   vec3: 0.1.10
   three: 0.154.0
@@ -43,7 +43,7 @@ importers:
         version: 0.26.28(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@nxg-org/mineflayer-auto-jump':
         specifier: ^0.7.12
-        version: 0.7.12
+        version: 0.7.16
       '@nxg-org/mineflayer-tracker':
         specifier: 1.2.1
         version: 1.2.1(encoding@0.1.13)
@@ -2019,8 +2019,8 @@ packages:
     engines: {node: ^12.13.0 || ^14.15.0 || >=16.0.0}
     deprecated: This functionality has been moved to @npmcli/fs
 
-  '@nxg-org/mineflayer-auto-jump@0.7.12':
-    resolution: {integrity: sha512-F5vX/lerlWx/5HVlkDNbvrtQ19PL6iG8i4ItPTIRtjGiFzusDefP7DI226zSFR8Wlaw45qHv0jn814p/4/qVdQ==}
+  '@nxg-org/mineflayer-auto-jump@0.7.16':
+    resolution: {integrity: sha512-UyOyb6SdxwknTO9y9+ntlh9Uv/tjKOgNeOEDlwYG1NhesX+3mPJNnBaW4acRl5eqLt0YXifDvaYaiLj7y6iuQA==}
 
   '@nxg-org/mineflayer-physics-util@1.8.7':
     resolution: {integrity: sha512-wtLYvHqoEFr/j0ny2lyogwjbMvwpFuG2aWI8sI14+EAiGFRpL5+cog2ujSDsnRTZruO7tUXMTiPc1kebjXwfJg==}
@@ -11368,7 +11368,7 @@ snapshots:
       rimraf: 3.0.2
     optional: true
 
-  '@nxg-org/mineflayer-auto-jump@0.7.12':
+  '@nxg-org/mineflayer-auto-jump@0.7.16':
     dependencies:
       '@nxg-org/mineflayer-physics-util': 1.8.7
       strict-event-emitter-types: 2.0.0
