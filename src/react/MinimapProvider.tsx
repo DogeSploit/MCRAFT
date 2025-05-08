@@ -12,6 +12,7 @@ import { INVISIBLE_BLOCKS } from 'renderer/viewer/lib/mesher/worldConstants'
 import { getRenamedData } from 'flying-squid/dist/blockRenames'
 import { useSnapshot } from 'valtio'
 import { subscribeKey } from 'valtio/utils'
+import { subscribe } from 'valtio'
 import { getThreeJsRendererMethods } from 'renderer/viewer/three/threeJsMethods'
 import BlockData from '../../renderer/viewer/lib/moreBlockDataGenerated.json'
 import preflatMap from '../preflatMap.json'
@@ -24,7 +25,7 @@ import { useIsModalActive } from './utilsApp'
 import { lastConnectOptions } from './AppStatusProvider'
 
 const findHeightMap = (obj: PCChunk): number[] | undefined => {
-  function search (obj: any): any | undefined {
+  function search(obj: any): any | undefined {
     for (const key in obj) {
       if (['heightmap', 'heightmaps'].includes(key.toLowerCase())) {
         return obj[key]
@@ -42,7 +43,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
   yaw: number
   world: string
   warps: WorldWarp[] = gameAdditionalState.warps
-  chunksStore = new Map<string, undefined | null | 'requested' | ChunkInfo >()
+  chunksStore = new Map<string, undefined | null | 'requested' | ChunkInfo>()
   loadingChunksQueue = new Set<string>()
   loadChunk: (key: string) => Promise<void> = this.loadChunkMinimap
   mapDrawer = new MinimapDrawer(this.loadChunk, this.warps, this.loadingChunksQueue, this.chunksStore)
@@ -58,7 +59,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
   isBuiltinHeightmapAvailable = false
   unsubscribers: Array<() => void> = []
 
-  constructor (pos?: Vec3) {
+  constructor(pos?: Vec3) {
     super()
     this.playerPosition = pos ?? new Vec3(0, 0, 0)
 
@@ -119,28 +120,27 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
       this.blockData.set(renamedKey, BlockData.colors[blockKey])
     }
 
-    subscribeKey(appViewer.rendererState, 'world', () => {
-      console.log('[MinimapProvider] world subscribe')
+    subscribe(appViewer.rendererState.world, () => {
       for (const key of this.loadingChunksQueue) {
-        if (appViewer.rendererState.world.chunksLoaded.includes(key)) {
+        if (appViewer.rendererState.world.chunksLoaded.has(key)) {
           this.loadingChunksQueue.delete(key)
           void this.loadChunk(key)
-        }
+        } 
       }
     })
   }
 
-  destroy () {
+  destroy() {
     for (const unsubscriber of this.unsubscribers) {
       unsubscriber()
     }
   }
 
-  get full () {
+  get full() {
     return this._full
   }
 
-  set full (full: boolean) {
+  set full(full: boolean) {
     if (!full) {
       console.log('this is minimap')
       this.loadChunk = this.loadChunkMinimap
@@ -149,14 +149,14 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     this._full = full
   }
 
-  overwriteWarps (newWarps: WorldWarp[]) {
+  overwriteWarps(newWarps: WorldWarp[]) {
     this.warps.splice(0, this.warps.length)
     for (const warp of newWarps) {
       this.warps.push({ ...warp })
     }
   }
 
-  setWarp (warp: WorldWarp, remove?: boolean): void {
+  setWarp(warp: WorldWarp, remove?: boolean): void {
     this.world = bot.game.dimension
     const index = this.warps.findIndex(w => w.name === warp.name)
     if (!remove && index === -1) {
@@ -177,7 +177,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     this.emit('updateWarps')
   }
 
-  getHighestBlockY (x: number, z: number, chunk?: Chunk) {
+  getHighestBlockY(x: number, z: number, chunk?: Chunk) {
     const chunkX = Math.floor(x / 16) * 16
     const chunkZ = Math.floor(z / 16) * 16
     if (this.chunksHeightmaps[`${chunkX},${chunkZ}`]) {
@@ -194,7 +194,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return minY
   }
 
-  async getChunkSingleplayer (chunkX: number, chunkZ: number) {
+  async getChunkSingleplayer(chunkX: number, chunkZ: number) {
     // absolute coords
     const region = (localServer!.overworld.storageProvider as any).getRegion(chunkX * 16, chunkZ * 16)
     if (!region) return 'unavailable'
@@ -202,42 +202,35 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return chunk
   }
 
-  async loadChunkMinimap (key: string) {
+  async loadChunkMinimap(key: string) {
     const [chunkX, chunkZ] = key.split(',').map(Number)
     const chunkWorldX = chunkX * 16
     const chunkWorldZ = chunkZ * 16
-    if (appViewer.rendererState.world.chunksLoaded.includes(`${chunkWorldX},${chunkWorldZ}`)) {
-      const highestBlocks = await getThreeJsRendererMethods()?.getHighestBlocks(`${chunkWorldX},${chunkWorldZ}`)
-      if (!highestBlocks) {
-        console.log('[MinimapProvider] no highestBlocks from renderMethods')
+    if (appViewer.rendererState.world.chunksLoaded.has(key)) {
+      // console.log('[MinimapProvider] loading chunk for minimap', key)
+      const heightmap = appViewer.rendererState.world.heightmaps.get(key)
+      if (!heightmap) {
+        console.warn('[MinimapProvider] no highestBlocks from renderMethods')
         return undefined
       } else {
-        console.log('[MinimapProvider] did get highest blocks')
+        // console.log('[MinimapProvider] did get highest blocks')
       }
-      const heightmap = new Uint8Array(256)
       const colors = Array.from({ length: 256 }).fill('') as string[]
       // avoid creating new object every time
       const blockPos = new Vec3(0, 0, 0)
-      // filling up colors and heightmap
+      // filling up colors
       for (let z = 0; z < 16; z += 1) {
         for (let x = 0; x < 16; x += 1) {
           const blockX = chunkWorldX + x
           const blockZ = chunkWorldZ + z
-          const hBlock = highestBlocks[`${blockX},${blockZ}`]
-          blockPos.x = blockX; blockPos.z = blockZ; blockPos.y = hBlock?.y ?? 0
-          let block = bot.world.getBlock(blockPos)
-          while (block?.name.includes('air')) {
-            blockPos.y -= 1
-            block = bot.world.getBlock(blockPos)
-          }
           const index = z * 16 + x
+          blockPos.x = blockX; blockPos.z = blockZ; blockPos.y = heightmap[index]
+          const block = bot.world.getBlock(blockPos)
           // blocks which are not set are shown as half transparent
-          if (!block || !hBlock) {
-            heightmap[index] = 0
+          if (!block) {
             colors[index] = 'rgba(0, 0, 0, 0.5)'
             continue
           }
-          heightmap[index] = block.position.y
           colors[index] = this.setColor(block)
         }
       }
@@ -252,7 +245,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     }
   }
 
-  async loadChunkNoRegion (key: string) {
+  async loadChunkNoRegion(key: string) {
     const [chunkX, chunkZ] = key.split(',').map(Number)
     const chunkWorldX = chunkX * 16
     const chunkWorldZ = chunkZ * 16
@@ -285,7 +278,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return chunk
   }
 
-  async loadChunkFromRegion (key: string): Promise<ChunkInfo | null | undefined> {
+  async loadChunkFromRegion(key: string): Promise<ChunkInfo | null | undefined> {
     const [chunkX, chunkZ] = key.split(',').map(Number)
     const chunkWorldX = chunkX * 16
     const chunkWorldZ = chunkZ * 16
@@ -320,7 +313,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return chunk
   }
 
-  async getChunkHeightMapFromRegion (chunkX: number, chunkZ: number, cb?: (hm: number[]) => void) {
+  async getChunkHeightMapFromRegion(chunkX: number, chunkZ: number, cb?: (hm: number[]) => void) {
     const regionX = Math.floor(chunkX / 32)
     const regionZ = Math.floor(chunkZ / 32)
     const regionKey = `${regionX},${regionZ}`
@@ -341,12 +334,12 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     // this.chunksHeightmaps[`${chunkX},${chunkZ}`] = heightmap
   }
 
-  async loadChunkFromViewer (key: string) {
+  async loadChunkFromViewer(key: string) {
     const [chunkX, chunkZ] = key.split(',').map(Number)
     const chunkWorldX = chunkX * 16
     const chunkWorldZ = chunkZ * 16
     const highestBlocks = await getThreeJsRendererMethods()?.getHighestBlocks(`${chunkWorldX},${chunkWorldZ}`)
-    if (appViewer.rendererState.world.chunksLoaded.includes(`${chunkWorldX},${chunkWorldZ}`)) {
+    if (appViewer.rendererState.world.chunksLoaded.has(`${chunkWorldX},${chunkWorldZ}`)) {
       const heightmap = new Uint8Array(256)
       const colors = Array.from({ length: 256 }).fill('') as string[]
       if (!highestBlocks) return null
@@ -376,7 +369,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     }
   }
 
-  applyShadows (chunk: ChunkInfo) {
+  applyShadows(chunk: ChunkInfo) {
     for (let j = 0; j < 16; j += 1) {
       for (let i = 0; i < 16; i += 1) {
         const index = j * 16 + i
@@ -433,7 +426,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     }
   }
 
-  makeDarker (color: string) {
+  makeDarker(color: string) {
     let rgbArray = color.match(/\d+/g)?.map(Number) ?? []
     if (rgbArray.length !== 3) return color
     rgbArray = rgbArray.map(element => {
@@ -444,7 +437,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return `rgb(${rgbArray.join(',')})`
   }
 
-  makeLighter (color: string) {
+  makeLighter(color: string) {
     let rgbArray = color.match(/\d+/g)?.map(Number) ?? []
     if (rgbArray.length !== 3) return color
     rgbArray = rgbArray.map(element => {
@@ -455,7 +448,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return `rgb(${rgbArray.join(',')})`
   }
 
-  clearChunksStore (x: number, z: number) {
+  clearChunksStore(x: number, z: number) {
     for (const key of Object.keys(this.chunksStore)) {
       const [chunkX, chunkZ] = key.split(',').map(Number)
       if (Math.hypot((chunkX - x), (chunkZ - z)) > 300) {
@@ -470,7 +463,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     }
   }
 
-  setColor (block: Block) {
+  setColor(block: Block) {
     let color: string
     if (this.isOldVersion) {
       color = BlockData.colors[preflatMap.blocks[`${block.type}:${block.metadata}`]?.replaceAll(/\[.*?]/g, '')]
@@ -496,7 +489,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     return color
   }
 
-  quickTp (x: number, z: number) {
+  quickTp(x: number, z: number) {
     const y = this.getHighestBlockY(x, z)
     bot.chat(`/tp ${x} ${y + 20} ${z}`)
     const timeout = setTimeout(() => {
@@ -506,7 +499,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     }, 500)
   }
 
-  async drawChunkOnCanvas (key: string, canvas: HTMLCanvasElement) {
+  async drawChunkOnCanvas(key: string, canvas: HTMLCanvasElement) {
     const chunk = await this.loadChunkFullmap(key)
     const [worldX, worldZ] = key.split(',').map(x => Number(x) * 16)
     const center = new Vec3(worldX + 8, 0, worldZ + 8)
@@ -523,11 +516,11 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
 
 const Inner = (
   { adapter, displayMode, toggleFullMap }:
-  {
-    adapter: DrawerAdapterImpl
-    displayMode?: DisplayMode,
-    toggleFullMap?: () => void
-  }
+    {
+      adapter: DrawerAdapterImpl
+      displayMode?: DisplayMode,
+      toggleFullMap?: () => void
+    }
 ) => {
 
   const updateWarps = (newWarps: WorldWarp[] | Error) => {

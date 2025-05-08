@@ -405,6 +405,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         if (loaded) {
           // CHUNK FINISHED
           this.finishedChunks[chunkKey] = true
+          this.reactiveState.world.chunksLoaded.add(`${Math.floor(chunkCoords[0]/16)},${Math.floor(chunkCoords[2]/16)}`)
           this.renderUpdateEmitter.emit(`chunkFinished`, `${chunkCoords[0]},${chunkCoords[2]}`)
           this.checkAllFinished()
           // merge highest blocks by sections into highest blocks by chunks
@@ -444,9 +445,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       }
     }
 
-    if (data.type == 'heightmap') {
-      console.log('[worldrendererCommon] received heightmap for', data.key, data.heightmap)
-      appViewer.rendererState.world.heightmaps.set(data.key, new Uint8Array(data.heighmap))
+    if (String(data.type).trim().normalize() === 'heightmap') {
+      appViewer.rendererState.world.heightmaps.set(data.key, new Uint8Array(data.heightmap))
     }
   }
 
@@ -605,7 +605,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
 
   updateChunksStats () {
     const loadedChunks = Object.keys(this.finishedChunks)
-    this.displayOptions.nonReactiveState.world.chunksLoaded = loadedChunks
+    this.displayOptions.nonReactiveState.world.chunksLoaded = new Set(loadedChunks)
     this.displayOptions.nonReactiveState.world.chunksTotalNumber = this.chunksLength
     this.reactiveState.world.allChunksLoaded = this.allChunksFinished
 

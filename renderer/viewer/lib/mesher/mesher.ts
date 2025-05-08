@@ -167,7 +167,7 @@ const handleMessage = data => {
           heightmap[index] = block ? blockPos.y : 0
         }
       }
-      postMessage({ type: 'heightmap', key: `${data.x},${data.z}`, heightmap })
+      postMessage({ type: 'heightmap', key: `${Math.floor(data.x/16)},${Math.floor(data.z/16)}`, heightmap })
 
       break
     }
