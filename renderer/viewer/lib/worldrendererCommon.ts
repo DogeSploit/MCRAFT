@@ -14,7 +14,7 @@ import { ResourcesManager } from '../../../src/resourcesManager'
 import { DisplayWorldOptions, GraphicsInitOptions, RendererReactiveState } from '../../../src/appViewer'
 import { SoundSystem } from '../three/threeJsSound'
 import { buildCleanupDecorator } from './cleanupDecorator'
-import { HighestBlockInfo, MesherGeometryOutput, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig } from './mesher/shared'
+import { HighestBlockInfo, MesherGeometryOutput, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig, MesherMainEvent } from './mesher/shared'
 import { chunkPos } from './simpleUtils'
 import { addNewStat, removeAllStats, removeStat, updatePanesVisibility, updateStatText } from './ui/newStats'
 import { WorldDataEmitter } from './worldDataEmitter'
@@ -366,12 +366,13 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.isProcessingQueue = false
   }
 
-  handleMessage (data) {
+  handleMessage (rawData: any) {
+    const data = rawData as MesherMainEvent
     if (!this.active) return
     this.mesherLogReader?.workerMessageReceived(data.type, data)
     if (data.type !== 'geometry' || !this.debugStopGeometryUpdate) {
       const start = performance.now()
-      this.handleWorkerMessage(data)
+      this.handleWorkerMessage(data as WorkerReceive)
       this.workerCustomHandleTime += performance.now() - start
     }
     if (data.type === 'geometry') {
@@ -445,7 +446,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       }
     }
 
-    if (String(data.type).trim().normalize() === 'heightmap') {
+    if (data.type === 'heightmap') {
       appViewer.rendererState.world.heightmaps.set(data.key, new Uint8Array(data.heightmap))
     }
   }

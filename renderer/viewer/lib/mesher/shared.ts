@@ -46,6 +46,15 @@ export type MesherGeometryOutput = {
   customBlockModels?: CustomBlockModels
 }
 
+export interface MesherMainEvents {
+  geometry: { type: 'geometry'; key: string; geometry: MesherGeometryOutput; workerIndex: number };
+  sectionFinished: { type: 'sectionFinished'; key: string; workerIndex: number; processTime?: number };
+  blockStateModelInfo: { type: 'blockStateModelInfo'; info: Record<string, BlockStateModelInfo> };
+  heightmap: { type: 'heightmap'; key: string; heightmap: Uint8Array };
+}
+
+export type MesherMainEvent = MesherMainEvents[keyof MesherMainEvents]
+
 export type HighestBlockInfo = { y: number, stateId: number | undefined, biomeId: number | undefined }
 
 export type BlockStateModelInfo = {
