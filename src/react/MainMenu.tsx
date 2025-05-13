@@ -27,6 +27,7 @@ interface Props {
   versionText?: string
   onVersionTextClick?: () => void
   singleplayerAvailable?: boolean
+  creditsAction?: Action
 }
 
 const httpsRegex = /^https?:\/\//
@@ -44,7 +45,8 @@ export default ({
   versionTitle,
   onVersionStatusClick,
   bottomRightLinks,
-  singleplayerAvailable = true
+  singleplayerAvailable = true,
+  creditsAction
 }: Props) => {
   const { appConfig } = useSnapshot(miscUiState)
 
@@ -145,6 +147,11 @@ export default ({
           onClick={optionsAction}
         >
           Options
+        </Button>
+        <Button
+          onClick={creditsAction}
+        >
+          Credits
         </Button>
         <div className={styles['menu-row']}>
           <PauseLinkButtons />
