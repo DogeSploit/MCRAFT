@@ -15,12 +15,12 @@ export default () => {
       backdrop
       className={styles.modalScreen}>
       <div className={styles.container}>
-        <h2 className={styles.title}>Minecraft Open Source Edition</h2>
+        <h2 className={styles.title}>Minecraft Open Source JS Edition</h2>
 
         <div className={styles.contentWrapper}>
           <small className={styles.subtitle}><i>What if Minecraft was an online game?</i></small>
           <p className={styles.paragraph}>
-            Hey! You are on the safest and fast modern Minecraft clone rewritten in JS. A huge work was done in the project, however many features would not be possible without these awesome projects:
+            Hey! You are on the safest modern Minecraft clone rewritten in JavaScript. A huge amount of work has gone into this project to make it fast and complete, and many features would not be possible without these awesome people and projects:
           </p>
           <ul className={styles.list}>
             <li className={styles.listItem}>- Everyone who provided awesome mods for the game</li>
