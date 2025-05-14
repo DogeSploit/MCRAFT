@@ -15,7 +15,7 @@ export default () => {
       title="Credits"
     >
       <PixelartIcon
-        iconName={pixelartIcons.loader}
+        iconName={pixelartIcons['book-open']}
         width={18}
       />
     </button>
