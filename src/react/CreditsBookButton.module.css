@@ -17,6 +17,6 @@
   opacity: 0.9;
 }
 
-.creditsButton:focus {
+.creditsButton:focus:not(:hover) {
   outline: 1px solid #fff;
 }
