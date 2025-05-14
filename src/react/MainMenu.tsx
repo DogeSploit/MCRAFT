@@ -76,7 +76,7 @@ export default ({
   const connectToServerLongPress = useLongPress(
     () => {
       if (process.env.NODE_ENV === 'development') {
-      // Connect to <origin>:25565
+        // Connect to <origin>:25565
         const origin = window.location.hostname
         const connectOptions: ConnectOptions = {
           server: `${origin}:25565`,
@@ -99,7 +99,6 @@ export default ({
       </div>
 
       <div className={styles.menu}>
-        <CreditsBookButton />
         <ButtonWithTooltip
           initialTooltip={{
             content: 'Connect to Java servers!',
@@ -151,6 +150,7 @@ export default ({
         <div className={styles['menu-row']}>
           <PauseLinkButtons />
         </div>
+        <CreditsBookButton />
       </div>
 
       <div className={styles['bottom-info']}>
