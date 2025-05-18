@@ -379,7 +379,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       this.logWorkerWork(() => `-> ${data.workerIndex} geometry ${data.key} ${JSON.stringify({ dataSize: JSON.stringify(data).length })}`)
       this.geometryReceiveCount[data.workerIndex] ??= 0
       this.geometryReceiveCount[data.workerIndex]++
-      const geometry = data.geometry as MesherGeometryOutput
+      const { geometry } = data
       this.highestBlocksBySections[data.key] = geometry.highestBlocks
       const chunkCoords = data.key.split(',').map(Number)
       this.lastChunkDistance = Math.max(...this.getDistance(new Vec3(chunkCoords[0], 0, chunkCoords[2])))
@@ -406,7 +406,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         if (loaded) {
           // CHUNK FINISHED
           this.finishedChunks[chunkKey] = true
-          this.reactiveState.world.chunksLoaded.add(`${Math.floor(chunkCoords[0]/16)},${Math.floor(chunkCoords[2]/16)}`)
+          this.reactiveState.world.chunksLoaded.add(`${Math.floor(chunkCoords[0] / 16)},${Math.floor(chunkCoords[2] / 16)}`)
           this.renderUpdateEmitter.emit(`chunkFinished`, `${chunkCoords[0]},${chunkCoords[2]}`)
           this.checkAllFinished()
           // merge highest blocks by sections into highest blocks by chunks
