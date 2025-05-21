@@ -36,5 +36,45 @@
         "type": "discord"
       }
     ]
+  ],
+  "mobileButtons": [
+    {
+      "type": "keypress",
+      "key": "F3",
+      "label": "F3"
+    },
+    {
+      "type": "command",
+      "command": "general.jump",
+      "label": "↑"
+    },
+    {
+      "type": "command",
+      "command": "general.sneak",
+      "label": "↓"
+    },
+    {
+      "type": "command",
+      "command": "general.inventory",
+      "label": "I"
+    },
+    {
+      "type": "command",
+      "command": "general.drop",
+      "label": "Q"
+    },
+    {
+      "type": "command",
+      "command": "general.zoom",
+      "label": "Zoom"
+    },
+    {
+      "type": "chat",
+      "modal": "chat"
+    },
+    {
+      "type": "pause",
+      "modal": "pause-screen"
+    }
   ]
 }

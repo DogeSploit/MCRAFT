@@ -5,6 +5,17 @@ import { setLoadingScreenStatus } from './appStatus'
 import { setStorageDataOnAppConfigLoad } from './react/appStorageProvider'
 import { customKeymaps, updateBinds } from './controls'
 
+export type MobileButtonType = 'command' | 'keypress' | 'modal' | 'chat' | 'pause'
+
+export type MobileButtonConfig = {
+  type: MobileButtonType
+  label?: string
+  icon?: string
+  command?: string
+  key?: string
+  modal?: string
+}
+
 export type AppConfig = {
   // defaultHost?: string
   // defaultHostSave?: string
@@ -25,6 +36,7 @@ export type AppConfig = {
   allowAutoConnect?: boolean
   splashText?: string
   pauseLinks?: Array<Array<Record<string, any>>>
+  mobileButtons?: MobileButtonConfig[]
   keybindings?: Record<string, any>
   defaultLanguage?: string
   displayLanguageSelector?: boolean
