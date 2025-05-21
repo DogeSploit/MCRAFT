@@ -66,13 +66,12 @@ export default () => {
 
   const toggleZoom = () => {
     zoomActiveRef.current = !zoomActiveRef.current
-
     gameAdditionalState.isZooming = zoomActiveRef.current
 
     if (zoomActiveRef.current) {
-      document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyC' }))
+      contro.emit('trigger', { command: 'general.zoom' } as any)
     } else {
-      document.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyC' }))
+      contro.emit('release', { command: 'general.zoom' } as any)
     }
   }
 
@@ -90,30 +89,24 @@ export default () => {
       }
 
       if (button.command === 'general.jump') {
-        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
+        contro.emit('trigger', { command: 'general.jump' } as any)
         setTimeout(() => {
-          document.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }))
+          contro.emit('release', { command: 'general.jump' } as any)
         }, 100)
         return
       }
 
       if (button.command === 'general.sneak') {
-        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft' }))
+        contro.emit('trigger', { command: 'general.sneak' } as any)
         setTimeout(() => {
-          document.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft' }))
+          contro.emit('release', { command: 'general.sneak' } as any)
         }, 100)
         return
       }
 
       try {
-        const keybind = contro.inputSchema?.commands?.[schema]?.[action]?.keys?.[0]
-
-        if (keybind) {
-          document.dispatchEvent(new KeyboardEvent('keydown', { code: keybind }))
-          document.dispatchEvent(new KeyboardEvent('keyup', { code: keybind }))
-        } else {
-          console.warn(`Button command not found: ${button.command}`)
-        }
+        contro.emit('trigger', { command: button.command } as any)
+        contro.emit('release', { command: button.command } as any)
       } catch (error) {
         console.error('Error executing command:', error)
       }
@@ -121,9 +114,13 @@ export default () => {
       // Modal open
       showModal({ reactType: button.modal })
     } else if (button.type === 'keypress' && button.key) {
-      // Keypress
-      document.dispatchEvent(new KeyboardEvent('keydown', { code: button.key }))
-      document.dispatchEvent(new KeyboardEvent('keyup', { code: button.key }))
+      if (button.key === 'F3') {
+        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3' }))
+        document.dispatchEvent(new KeyboardEvent('keyup', { code: 'F3' }))
+      } else {
+        document.dispatchEvent(new KeyboardEvent('keydown', { code: button.key }))
+        document.dispatchEvent(new KeyboardEvent('keyup', { code: button.key }))
+      }
     } else if (button.type === 'chat') {
       // Chat button
       if (activeModalStack.at(-1)?.reactType === 'chat') {
