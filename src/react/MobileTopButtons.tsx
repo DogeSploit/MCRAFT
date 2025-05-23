@@ -5,15 +5,12 @@ import { watchValue } from '../optionsStorage'
 import { MobileButtonConfig } from '../appConfig'
 import { showModal, miscUiState, activeModalStack, hideCurrentModal, gameAdditionalState } from '../globalState'
 import { showOptionsModal } from './SelectOption'
-import useLongPress from './useLongPress'
 import styles from './MobileTopButtons.module.css'
-
 
 export default () => {
   const elRef = useRef<HTMLDivElement | null>(null)
   const { appConfig } = useSnapshot(miscUiState)
   const mobileButtonsConfig = appConfig?.mobileButtons
-  const zoomActiveRef = useRef(false)
 
   const showMobileControls = (bl) => {
     if (elRef.current) elRef.current.style.display = bl ? 'flex' : 'none'
@@ -25,7 +22,7 @@ export default () => {
     })
   }, [])
 
-  const onLongPress = async () => {
+  const onF3LongPress = async () => {
     const select = await showOptionsModal('', f3Keybinds.filter(f3Keybind => {
       return f3Keybind.mobileTitle && (f3Keybind.enabled?.() ?? true)
     }).map(f3Keybind => {
@@ -35,13 +32,6 @@ export default () => {
     const f3Keybind = f3Keybinds.find(f3Keybind => f3Keybind.mobileTitle === select)
     if (f3Keybind) void f3Keybind.action()
   }
-
-  const defaultOptions = {
-    shouldPreventDefault: true,
-    delay: 500,
-  }
-  const longPressEvent = useLongPress(onLongPress, () => { }, defaultOptions)
-
 
   const onChatLongPress = () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }))
@@ -55,139 +45,93 @@ export default () => {
     }
   }
 
-  const chatLongPressEvent = useLongPress(
-    onChatLongPress,
-    onChatClick,
-    {
-      shouldPreventDefault: true,
-      delay: 300,
-    }
-  )
-
-  const toggleZoom = () => {
-    zoomActiveRef.current = !zoomActiveRef.current
-    gameAdditionalState.isZooming = zoomActiveRef.current
-
-    if (zoomActiveRef.current) {
-      contro.emit('trigger', { command: 'general.zoom' } as any)
-    } else {
-      contro.emit('release', { command: 'general.zoom' } as any)
-    }
-  }
-
-  const handleButtonAction = (button: MobileButtonConfig) => {
-    if (button.type === 'command' && button.command) {
-      const [schema, action] = button.command.split('.')
-      if (!schema || !action) {
-        console.warn(`invalid command format: ${button.command}. Must be 'schema.action'`)
-        return
-      }
-
-      if (button.command === 'general.zoom') {
-        toggleZoom()
-        return
-      }
-
-      if (button.command === 'general.jump') {
-        contro.emit('trigger', { command: 'general.jump' } as any)
-        setTimeout(() => {
-          contro.emit('release', { command: 'general.jump' } as any)
-        }, 100)
-        return
-      }
-
-      if (button.command === 'general.sneak') {
-        contro.emit('trigger', { command: 'general.sneak' } as any)
-        setTimeout(() => {
-          contro.emit('release', { command: 'general.sneak' } as any)
-        }, 100)
-        return
-      }
-
-      try {
-        contro.emit('trigger', { command: button.command } as any)
-        contro.emit('release', { command: button.command } as any)
-      } catch (error) {
-        console.error('Error executing command:', error)
-      }
-    } else if (button.type === 'modal' && button.modal) {
-      // Modal open
-      showModal({ reactType: button.modal })
-    } else if (button.type === 'keypress' && button.key) {
-      if (button.key === 'F3') {
-        document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3' }))
-        document.dispatchEvent(new KeyboardEvent('keyup', { code: 'F3' }))
-      } else {
-        document.dispatchEvent(new KeyboardEvent('keydown', { code: button.key }))
-        document.dispatchEvent(new KeyboardEvent('keyup', { code: button.key }))
-      }
-    } else if (button.type === 'chat') {
-      // Chat button
-      if (activeModalStack.at(-1)?.reactType === 'chat') {
-        hideCurrentModal()
-      } else {
-        showModal({ reactType: 'chat' })
-      }
-    } else if (button.type === 'pause') {
-      // Pause screen
-      showModal({ reactType: 'pause-screen' })
-    }
-  }
-
-  // Standard buttons that will be displayed if not specified in the config
-  const defaultButtons = (
-    <>
-      <div
-        className={styles['debug-btn']} onPointerDown={(e) => {
-          window.dispatchEvent(new MouseEvent('mousedown', { button: 1 }))
-        }}
-      >S
-      </div>
-      <div
-        className={styles['debug-btn']} onPointerDown={(e) => {
-          document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3' }))
-          document.dispatchEvent(new KeyboardEvent('keyup', { code: 'F3' }))
-        }} {...longPressEvent}
-      >F3
-      </div>
-      <div
-        className={styles['chat-btn']}
-        {...chatLongPressEvent}
-        onPointerUp={(e) => {
-          document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab' }))
-        }}
-      />
-      <div
-        className={styles['pause-btn']} onPointerDown={(e) => {
-          e.stopPropagation()
+  const handleCommand = (command: string, isDown: boolean) => {
+    if (isDown) {
+      switch (command) {
+        case 'chat':
+          onChatClick()
+          break
+        case 'pause':
           showModal({ reactType: 'pause-screen' })
-        }}
-      />
-    </>
-  )
+          break
+        case 'F3':
+          document.dispatchEvent(new KeyboardEvent('keydown', { code: 'F3' }))
+          break
+        default:
+          if (command.startsWith('general.')) {
+            if (command === 'general.inventory') {
+              if (activeModalStack.at(-1)?.reactType?.startsWith?.('player_win:')) {
+                hideCurrentModal()
+              } else {
+                document.exitPointerLock?.()
+                contro.emit('trigger', { command } as any)
+              }
+            } else {
+              contro.emit('trigger', { command } as any)
+            }
+          }
+      }
+    } else {
+      switch (command) {
+        case 'F3':
+          document.dispatchEvent(new KeyboardEvent('keyup', { code: 'F3' }))
+          break
+        case 'chat':
+        case 'pause':
+        case 'general.inventory':
+        case 'general.drop':
+          // No release action needed
+          break
+        default:
+          if (command.startsWith('general.')) {
+            contro.emit('release', { command } as any)
+          }
+      }
+    }
+  }
 
-  // Displaying buttons from the configuration
   const renderConfigButtons = () => {
     return mobileButtonsConfig?.map((button, index) => {
       let className = styles['debug-btn']
       let label = button.label || button.icon || '?'
 
-      if (button.type === 'chat') {
+      if (button.action === 'chat') {
         className = styles['chat-btn']
         label = ''
-      } else if (button.type === 'pause') {
+      } else if (button.action === 'pause') {
         className = styles['pause-btn']
         label = ''
+      }
+
+      const onPointerDown = (e) => {
+        const elem = e.currentTarget as HTMLElement
+        elem.setPointerCapture(e.pointerId)
+
+        if (button.actionHold) {
+          handleCommand(button.actionHold, true)
+        } else {
+          handleCommand(button.action, true)
+        }
+      }
+
+      const onPointerUp = (e) => {
+        const elem = e.currentTarget as HTMLElement
+        elem.releasePointerCapture(e.pointerId)
+
+        if (button.actionHold) {
+          handleCommand(button.actionHold, false)
+        } else {
+          handleCommand(button.action, false)
+        }
       }
 
       return (
         <div
           key={index}
           className={className}
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            handleButtonAction(button)
-          }}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onLostPointerCapture={onPointerUp}
         >
           {label}
         </div>
@@ -197,6 +141,6 @@ export default () => {
 
   // ios note: just don't use <button>
   return <div ref={elRef} className={styles['mobile-top-btns']} id="mobile-top">
-    {mobileButtonsConfig && mobileButtonsConfig.length > 0 ? renderConfigButtons() : defaultButtons}
+    {mobileButtonsConfig && mobileButtonsConfig.length > 0 ? renderConfigButtons() : ''}
   </div>
 }

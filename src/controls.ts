@@ -54,7 +54,7 @@ export const contro = new ControMax({
       attackDestroy: [null, 'Right Trigger'],
       interactPlace: [null, 'Left Trigger'],
       swapHands: ['KeyF'],
-      selectItem: ['KeyH'], // default will be removed
+      selectItem: ['KeyH'],
       rotateCameraLeft: [null],
       rotateCameraRight: [null],
       rotateCameraUp: [null],

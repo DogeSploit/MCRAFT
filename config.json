@@ -40,42 +40,35 @@
   ],
   "mobileButtons": [
     {
-      "type": "keypress",
-      "key": "F3",
-      "label": "F3"
+      "action": "general.zoom",
+      "actionHold": "",
+      "label": "Zoom",
+      "icon": ""
     },
     {
-      "type": "command",
-      "command": "general.jump",
-      "label": "↑"
-    },
-    {
-      "type": "command",
-      "command": "general.sneak",
-      "label": "↓"
-    },
-    {
-      "type": "command",
-      "command": "general.inventory",
+      "action": "general.inventory",
+      "actionHold": "",
       "label": "I"
     },
     {
-      "type": "command",
-      "command": "general.drop",
+      "action": "general.drop",
+      "actionHold": "",
       "label": "Q"
     },
     {
-      "type": "command",
-      "command": "general.zoom",
-      "label": "Zoom"
+      "action": "F3",
+      "actionHold": "",
+      "label": "F3"
     },
     {
-      "type": "chat",
-      "modal": "chat"
+      "action": "chat",
+      "actionHold": "",
+      "label": ""
     },
     {
-      "type": "pause",
-      "modal": "pause-screen"
+      "action": "pause",
+      "actionHold": "",
+      "label": ""
     }
   ]
 }
