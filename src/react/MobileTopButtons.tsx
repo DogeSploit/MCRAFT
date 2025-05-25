@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useSnapshot } from 'valtio'
+import { stringStartsWith } from 'contro-max/build/stringUtils'
 import { f3Keybinds, contro } from '../controls'
 import { watchValue } from '../optionsStorage'
 import { MobileButtonConfig, ActionHoldConfig } from '../appConfig'
@@ -40,25 +41,11 @@ export default () => {
   const handleCommand = (command: string | ActionHoldConfig, isDown: boolean) => {
     const commandString = typeof command === 'string' ? command : command.command
 
-    if (isDown) {
-      switch (commandString) {
-        case 'pause':
-          showModal({ reactType: 'pause-screen' })
-          break
-        default:
-          if (commandString.startsWith('general.')) {
-            contro.emit('trigger', { command: commandString } as any)
-          }
-      }
-    } else {
-      switch (commandString) {
-        case 'pause':
-          // No release action needed
-          break
-        default:
-          if (commandString.startsWith('general.')) {
-            contro.emit('release', { command: commandString } as any)
-          }
+    if (!stringStartsWith(commandString, 'custom')) {
+      if (isDown) {
+        contro.emit('trigger', { command: commandString } as any)
+      } else {
+        contro.emit('release', { command: commandString } as any)
       }
     }
   }
@@ -66,12 +53,12 @@ export default () => {
   const renderConfigButtons = () => {
     return mobileButtonsConfig?.map((button, index) => {
       let className = styles['debug-btn']
-      let label = button.label || button.icon || '?'
+      let label = button.icon || button.label || '?'
 
       if (button.action === 'general.chat') {
         className = styles['chat-btn']
         label = ''
-      } else if (button.action === 'pause') {
+      } else if (button.action === 'ui.back') {
         className = styles['pause-btn']
         label = ''
       }

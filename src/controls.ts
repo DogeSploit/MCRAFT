@@ -235,7 +235,7 @@ const inModalCommand = (command: Command, pressed: boolean) => {
   if (pressed && !gamepadUiCursorState.display) return
 
   if (pressed) {
-    if (command === 'ui.back') {
+    if (command === 'ui.back' || command === 'ui.pauseMenu') {
       hideCurrentModal()
     }
     if (command === 'ui.leftClick' || command === 'ui.rightClick') {
@@ -428,6 +428,26 @@ const onTriggerOrReleased = (command: Command, pressed: boolean) => {
         tabListState.isOpen = pressed
         break
     }
+  } else if (stringStartsWith(command, 'ui')) {
+    switch (command) {
+      case 'ui.back':
+      case 'ui.pauseMenu':
+        if (pressed) {
+          if (activeModalStack.length) {
+            hideCurrentModal()
+          } else {
+            showModal({ reactType: 'pause-screen' })
+          }
+        }
+        break
+      case 'ui.toggleFullscreen':
+      case 'ui.toggleMap':
+      case 'ui.leftClick':
+      case 'ui.rightClick':
+      case 'ui.speedupCursor':
+        // These are handled elsewhere
+        break
+    }
   }
 }
 
@@ -583,10 +603,6 @@ contro.on('trigger', ({ command }) => {
 
   if (command === 'communication.toggleMicrophone') {
     // toggleMicrophoneMuted()
-  }
-
-  if (command === 'ui.pauseMenu') {
-    showModal({ reactType: 'pause-screen' })
   }
 
   if (command === 'ui.toggleFullscreen') {
