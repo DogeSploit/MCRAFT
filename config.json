@@ -58,8 +58,8 @@
     {
       "action": "general.f3",
       "actionHold": {
-        "command": "general.f3",
-        "longPressAction": "onF3LongPress"
+        "command": "general.debugOverlay",
+        "longPressAction": "general.debugOverlayHelpMenu"
       },
       "label": "F3"
     },

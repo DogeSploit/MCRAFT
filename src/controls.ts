@@ -64,7 +64,8 @@ export const contro = new ControMax({
       chat: [['KeyT', 'Enter']],
       command: ['Slash'],
       playersList: ['Tab'],
-      f3: ['F3'],
+      debugOverlay: ['F3'],
+      debugOverlayHelpMenu: [null],
       // client side
       zoom: ['KeyC'],
       viewerConsole: ['Backquote'],
@@ -402,7 +403,7 @@ const onTriggerOrReleased = (command: Command, pressed: boolean) => {
       case 'general.zoom':
         gameAdditionalState.isZooming = pressed
         break
-      case 'general.f3':
+      case 'general.debugOverlay':
         if (pressed) {
           hardcodedPressedKeys.add('F3')
           const pressedKey = [...contro.pressedKeys].find(key => key !== 'F3')
@@ -416,6 +417,11 @@ const onTriggerOrReleased = (command: Command, pressed: boolean) => {
           }
         } else {
           hardcodedPressedKeys.delete('F3')
+        }
+        break
+      case 'general.debugOverlayHelpMenu':
+        if (pressed) {
+          void onF3LongPress()
         }
         break
       case 'general.rotateCameraLeft':
@@ -536,7 +542,8 @@ contro.on('trigger', ({ command }) => {
       case 'general.rotateCameraRight':
       case 'general.rotateCameraUp':
       case 'general.rotateCameraDown':
-      case 'general.f3':
+      case 'general.debugOverlay':
+      case 'general.debugOverlayHelpMenu':
       case 'general.playersList':
         // no-op
         break

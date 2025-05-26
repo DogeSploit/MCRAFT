@@ -73,7 +73,7 @@ export default () => {
           if (actionHold.longPressAction) {
             const timerId = window.setTimeout(() => {
               if (actionHold.longPressAction === 'onF3LongPress') {
-                void onF3LongPress()
+                // void onF3LongPress()
               }
             }, 500)
             elem.dataset.longPressTimer = String(timerId)
