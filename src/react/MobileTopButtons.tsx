@@ -1,16 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { useSnapshot } from 'valtio'
 import { stringStartsWith } from 'contro-max/build/stringUtils'
-import { f3Keybinds, contro, onF3LongPress } from '../controls'
+import type { CommandEventArgument } from 'contro-max/build/types'
+import { contro, onF3LongPress } from '../controls'
+import type { Command } from '../controls'
 import { watchValue } from '../optionsStorage'
 import { MobileButtonConfig, ActionHoldConfig } from '../appConfig'
-import { showModal, miscUiState, activeModalStack, hideCurrentModal, gameAdditionalState } from '../globalState'
-import { showOptionsModal } from './SelectOption'
+import { miscUiState } from '../globalState'
 import styles from './MobileTopButtons.module.css'
 import PixelartIcon from './PixelartIcon'
 
 interface ExtendedActionHoldConfig extends ActionHoldConfig {
-  longPressAction?: string;
+  command: Command;
+  longPressAction?: Command;
 }
 
 export default () => {
@@ -18,25 +20,42 @@ export default () => {
   const { appConfig } = useSnapshot(miscUiState)
   const mobileButtonsConfig = appConfig?.mobileButtons
 
-  const showMobileControls = (bl) => {
-    if (elRef.current) elRef.current.style.display = bl ? 'flex' : 'none'
+  const showMobileControls = (visible: boolean) => {
+    if (elRef.current) {
+      elRef.current.style.display = visible ? 'flex' : 'none'
+    }
   }
 
   useEffect(() => {
     watchValue(miscUiState, o => {
-      showMobileControls(o.currentTouch)
+      showMobileControls(Boolean(o.currentTouch))
     })
   }, [])
 
-  const handleCommand = (command: string | ActionHoldConfig, isDown: boolean) => {
+  const handleCommand = (command: Command | ExtendedActionHoldConfig, isDown: boolean) => {
     const commandString = typeof command === 'string' ? command : command.command
 
     if (!stringStartsWith(commandString, 'custom')) {
-      if (isDown) {
-        contro.emit('trigger', { command: commandString } as any)
-      } else {
-        contro.emit('release', { command: commandString } as any)
+      const event: CommandEventArgument<typeof contro['_commandsRaw']> = {
+        command: commandString,
+        schema: {
+          keys: [],
+          gamepad: []
+        }
       }
+      if (isDown) {
+        contro.emit('trigger', event)
+      } else {
+        contro.emit('release', event)
+      }
+    }
+  }
+
+  const handleLongPress = (actionHold: ExtendedActionHoldConfig) => {
+    if (actionHold.longPressAction === 'general.debugOverlayHelpMenu') {
+      void onF3LongPress()
+    } else if (actionHold.longPressAction) {
+      handleCommand(actionHold.longPressAction, true)
     }
   }
 
@@ -47,7 +66,7 @@ export default () => {
 
       if (typeof label === 'string' && label.startsWith('pixelarticons:')) {
         const iconName = label.replace('pixelarticons:', '')
-        label = <PixelartIcon iconName={iconName}/>
+        label = <PixelartIcon iconName={iconName} />
       }
 
       switch (button.action) {
@@ -64,7 +83,7 @@ export default () => {
           break
       }
 
-      const onPointerDown = (e) => {
+      const onPointerDown = (e: React.PointerEvent) => {
         const elem = e.currentTarget as HTMLElement
         elem.setPointerCapture(e.pointerId)
 
@@ -72,21 +91,19 @@ export default () => {
           const actionHold = button.actionHold as ExtendedActionHoldConfig
           if (actionHold.longPressAction) {
             const timerId = window.setTimeout(() => {
-              if (actionHold.longPressAction === 'onF3LongPress') {
-                // void onF3LongPress()
-              }
+              handleLongPress(actionHold)
             }, 500)
             elem.dataset.longPressTimer = String(timerId)
             handleCommand(actionHold.command, true)
           } else {
-            handleCommand(button.actionHold, true)
+            handleCommand(button.actionHold as Command, true)
           }
         } else {
-          handleCommand(button.action, true)
+          handleCommand(button.action as Command, true)
         }
       }
 
-      const onPointerUp = (e) => {
+      const onPointerUp = (e: React.PointerEvent) => {
         const elem = e.currentTarget as HTMLElement
         elem.releasePointerCapture(e.pointerId)
 
@@ -101,10 +118,10 @@ export default () => {
           if (actionHold.longPressAction) {
             handleCommand(actionHold.command, false)
           } else {
-            handleCommand(button.actionHold, false)
+            handleCommand(button.actionHold as Command, false)
           }
         } else {
-          handleCommand(button.action, false)
+          handleCommand(button.action as Command, false)
         }
       }
 
@@ -123,7 +140,9 @@ export default () => {
   }
 
   // ios note: just don't use <button>
-  return <div ref={elRef} className={styles['mobile-top-btns']} id="mobile-top">
-    {mobileButtonsConfig && mobileButtonsConfig.length > 0 ? renderConfigButtons() : ''}
-  </div>
+  return (
+    <div ref={elRef} className={styles['mobile-top-btns']} id="mobile-top">
+      {mobileButtonsConfig && mobileButtonsConfig.length > 0 ? renderConfigButtons() : null}
+    </div>
+  )
 }
