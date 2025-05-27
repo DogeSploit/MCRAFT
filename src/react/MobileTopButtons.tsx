@@ -5,33 +5,16 @@ import type { CommandEventArgument } from 'contro-max/build/types'
 import { contro, onF3LongPress } from '../controls'
 import type { Command } from '../controls'
 import { watchValue } from '../optionsStorage'
-import { MobileButtonConfig, ActionHoldConfig } from '../appConfig'
+import { MobileButtonConfig, ActionHoldConfig, ActionType, CustomAction } from '../appConfig'
 import { miscUiState } from '../globalState'
 import { customCommandsConfig } from '../customCommands'
 import PixelartIcon from './PixelartIcon'
 import styles from './MobileTopButtons.module.css'
 
-type CustomAction = {
-  type: string
-  input: any[]
-}
-
-type ActionType = Command | CustomAction
-
-interface MobileButtonActionHoldConfig {
-  command: ActionType
-  longPressAction?: ActionType
-}
-
-interface MobileButton extends Omit<MobileButtonConfig, 'action' | 'actionHold'> {
-  action?: ActionType
-  actionHold?: MobileButtonActionHoldConfig
-}
-
 export default () => {
   const elRef = useRef<HTMLDivElement | null>(null)
   const { appConfig } = useSnapshot(miscUiState)
-  const mobileButtonsConfig = appConfig?.mobileButtons as MobileButton[] | undefined
+  const mobileButtonsConfig = appConfig?.mobileButtons
 
   const showMobileControls = (visible: boolean) => {
     if (elRef.current) {
@@ -48,16 +31,16 @@ export default () => {
   const handleCustomAction = (action: CustomAction) => {
     const handler = customCommandsConfig[action.type]?.handler
     if (handler) {
-      handler(action.input)
+      handler([...action.input])
     }
   }
 
-  const handleCommand = (command: ActionType | MobileButtonActionHoldConfig, isDown: boolean) => {
+  const handleCommand = (command: ActionType | ActionHoldConfig, isDown: boolean) => {
     const commandValue = typeof command === 'string' ? command : 'command' in command ? command.command : command
 
     if (typeof commandValue === 'string' && !stringStartsWith(commandValue, 'custom')) {
       const event: CommandEventArgument<typeof contro['_commandsRaw']> = {
-        command: commandValue,
+        command: commandValue as Command,
         schema: {
           keys: [],
           gamepad: []
@@ -75,7 +58,7 @@ export default () => {
     }
   }
 
-  const handleLongPress = (actionHold: MobileButtonActionHoldConfig) => {
+  const handleLongPress = (actionHold: ActionHoldConfig) => {
     if (typeof actionHold.longPressAction === 'string' && actionHold.longPressAction === 'general.debugOverlayHelpMenu') {
       void onF3LongPress()
     } else if (actionHold.longPressAction) {
@@ -102,7 +85,7 @@ export default () => {
   const renderConfigButtons = () => {
     return mobileButtonsConfig?.map((button, index) => {
       const className = button.action ? getButtonClassName(button.action) : styles['debug-btn']
-      let label: string | JSX.Element = button.icon || button.label || '?'
+      let label: string | JSX.Element = button.icon || button.label || ''
 
       if (typeof label === 'string' && label.startsWith('pixelarticons:')) {
         const iconName = label.replace('pixelarticons:', '')
@@ -116,15 +99,19 @@ export default () => {
         const { actionHold, action } = button
 
         if (actionHold) {
-          const { command, longPressAction } = actionHold
-          if (longPressAction) {
-            const timerId = window.setTimeout(() => {
-              handleLongPress(actionHold)
-            }, 500)
-            elem.dataset.longPressTimer = String(timerId)
-            handleCommand(command, true)
+          if (typeof actionHold === 'string' || !('command' in actionHold)) {
+            handleCommand(actionHold, true)
           } else {
-            handleCommand(command, true)
+            const { command, longPressAction, duration } = actionHold
+            if (longPressAction) {
+              const timerId = window.setTimeout(() => {
+                handleLongPress(actionHold)
+              }, duration || 500)
+              elem.dataset.longPressTimer = String(timerId)
+              handleCommand(command, true)
+            } else {
+              handleCommand(command, true)
+            }
           }
         } else if (action) {
           handleCommand(action, true)
@@ -144,7 +131,11 @@ export default () => {
         const { actionHold, action } = button
 
         if (actionHold) {
-          handleCommand(actionHold.command, false)
+          if (typeof actionHold === 'string' || !('command' in actionHold)) {
+            handleCommand(actionHold, false)
+          } else {
+            handleCommand(actionHold.command, false)
+          }
         } else if (action) {
           handleCommand(action, false)
         }
