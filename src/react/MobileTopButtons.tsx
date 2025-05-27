@@ -16,6 +16,9 @@ export default () => {
   const { appConfig } = useSnapshot(miscUiState)
   const mobileButtonsConfig = appConfig?.mobileButtons
 
+  const longPressTimerIdRef = useRef<number | null>(null)
+  const actionToShortPressRef = useRef<ActionType | null>(null)
+
   const showMobileControls = (visible: boolean) => {
     if (elRef.current) {
       elRef.current.style.display = visible ? 'flex' : 'none'
@@ -96,19 +99,28 @@ export default () => {
         const elem = e.currentTarget as HTMLElement
         elem.setPointerCapture(e.pointerId)
 
+        if (longPressTimerIdRef.current) {
+          clearTimeout(longPressTimerIdRef.current)
+          longPressTimerIdRef.current = null
+        }
+        actionToShortPressRef.current = null
+
         const { actionHold, action } = button
 
         if (actionHold) {
-          if (typeof actionHold === 'string' || !('command' in actionHold)) {
+          if (typeof actionHold === 'string' || (typeof actionHold === 'object' && !('command' in actionHold))) {
             handleCommand(actionHold, true)
           } else {
-            const { command, longPressAction, duration } = actionHold
+            const config = actionHold
+            const { command, longPressAction, duration } = config
+
             if (longPressAction) {
-              const timerId = window.setTimeout(() => {
-                handleLongPress(actionHold)
+              actionToShortPressRef.current = command
+              longPressTimerIdRef.current = window.setTimeout(() => {
+                handleLongPress(config)
+                actionToShortPressRef.current = null
+                longPressTimerIdRef.current = null
               }, duration || 500)
-              elem.dataset.longPressTimer = String(timerId)
-              handleCommand(command, true)
             } else {
               handleCommand(command, true)
             }
@@ -122,23 +134,35 @@ export default () => {
         const elem = e.currentTarget as HTMLElement
         elem.releasePointerCapture(e.pointerId)
 
-        const timerId = elem.dataset.longPressTimer
-        if (timerId) {
-          clearTimeout(parseInt(timerId, 10))
-          delete elem.dataset.longPressTimer
-        }
-
         const { actionHold, action } = button
+        let wasShortPress = false
 
-        if (actionHold) {
-          if (typeof actionHold === 'string' || !('command' in actionHold)) {
-            handleCommand(actionHold, false)
-          } else {
-            handleCommand(actionHold.command, false)
+        if (longPressTimerIdRef.current) {
+          clearTimeout(longPressTimerIdRef.current)
+          longPressTimerIdRef.current = null
+          if (actionToShortPressRef.current) {
+            handleCommand(actionToShortPressRef.current, true)
+            handleCommand(actionToShortPressRef.current, false)
+            wasShortPress = true
           }
-        } else if (action) {
-          handleCommand(action, false)
         }
+
+        if (!wasShortPress) {
+          if (actionHold) {
+            if (typeof actionHold === 'object' && 'longPressAction' in actionHold && actionHold.longPressAction) {
+              if (actionToShortPressRef.current === null && typeof actionHold.longPressAction === 'string') {
+                handleCommand(actionHold.longPressAction, false)
+              }
+            } else if (typeof actionHold === 'string') {
+              handleCommand(actionHold, false)
+            } else if (typeof actionHold === 'object' && 'command' in actionHold) {
+              handleCommand(actionHold.command, false)
+            }
+          } else if (action) {
+            handleCommand(action, false)
+          }
+        }
+        actionToShortPressRef.current = null
       }
 
       return (
