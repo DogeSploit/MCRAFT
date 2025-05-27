@@ -7,18 +7,31 @@ import type { Command } from '../controls'
 import { watchValue } from '../optionsStorage'
 import { MobileButtonConfig, ActionHoldConfig } from '../appConfig'
 import { miscUiState } from '../globalState'
-import styles from './MobileTopButtons.module.css'
+import { customCommandsConfig } from '../customCommands'
 import PixelartIcon from './PixelartIcon'
+import styles from './MobileTopButtons.module.css'
 
-interface ExtendedActionHoldConfig extends ActionHoldConfig {
-  command: Command;
-  longPressAction?: Command;
+type CustomAction = {
+  type: string
+  input: any[]
+}
+
+type ActionType = Command | CustomAction
+
+interface MobileButtonActionHoldConfig {
+  command: ActionType
+  longPressAction?: ActionType
+}
+
+interface MobileButton extends Omit<MobileButtonConfig, 'action' | 'actionHold'> {
+  action?: ActionType
+  actionHold?: MobileButtonActionHoldConfig
 }
 
 export default () => {
   const elRef = useRef<HTMLDivElement | null>(null)
   const { appConfig } = useSnapshot(miscUiState)
-  const mobileButtonsConfig = appConfig?.mobileButtons
+  const mobileButtonsConfig = appConfig?.mobileButtons as MobileButton[] | undefined
 
   const showMobileControls = (visible: boolean) => {
     if (elRef.current) {
@@ -32,12 +45,19 @@ export default () => {
     })
   }, [])
 
-  const handleCommand = (command: Command | ExtendedActionHoldConfig, isDown: boolean) => {
-    const commandString = typeof command === 'string' ? command : command.command
+  const handleCustomAction = (action: CustomAction) => {
+    const handler = customCommandsConfig[action.type]?.handler
+    if (handler) {
+      handler(action.input)
+    }
+  }
 
-    if (!stringStartsWith(commandString, 'custom')) {
+  const handleCommand = (command: ActionType | MobileButtonActionHoldConfig, isDown: boolean) => {
+    const commandValue = typeof command === 'string' ? command : 'command' in command ? command.command : command
+
+    if (typeof commandValue === 'string' && !stringStartsWith(commandValue, 'custom')) {
       const event: CommandEventArgument<typeof contro['_commandsRaw']> = {
-        command: commandString,
+        command: commandValue,
         schema: {
           keys: [],
           gamepad: []
@@ -48,20 +68,40 @@ export default () => {
       } else {
         contro.emit('release', event)
       }
+    } else if (typeof commandValue === 'object') {
+      if (isDown) {
+        handleCustomAction(commandValue)
+      }
     }
   }
 
-  const handleLongPress = (actionHold: ExtendedActionHoldConfig) => {
-    if (actionHold.longPressAction === 'general.debugOverlayHelpMenu') {
+  const handleLongPress = (actionHold: MobileButtonActionHoldConfig) => {
+    if (typeof actionHold.longPressAction === 'string' && actionHold.longPressAction === 'general.debugOverlayHelpMenu') {
       void onF3LongPress()
     } else if (actionHold.longPressAction) {
       handleCommand(actionHold.longPressAction, true)
     }
   }
 
+  const getButtonClassName = (action: ActionType): string => {
+    if (typeof action === 'string') {
+      switch (action) {
+        case 'general.chat':
+          return styles['chat-btn']
+        case 'ui.back':
+          return styles['pause-btn']
+        case 'general.playersList':
+          return styles['tab-btn']
+        default:
+          return styles['debug-btn']
+      }
+    }
+    return styles['debug-btn']
+  }
+
   const renderConfigButtons = () => {
     return mobileButtonsConfig?.map((button, index) => {
-      let className = styles['debug-btn']
+      const className = button.action ? getButtonClassName(button.action) : styles['debug-btn']
       let label: string | JSX.Element = button.icon || button.label || '?'
 
       if (typeof label === 'string' && label.startsWith('pixelarticons:')) {
@@ -69,37 +109,25 @@ export default () => {
         label = <PixelartIcon iconName={iconName} />
       }
 
-      switch (button.action) {
-        case 'general.chat':
-          className = styles['chat-btn']
-          label = ''
-          break
-        case 'ui.back':
-          className = styles['pause-btn']
-          label = ''
-          break
-        case 'general.playersList':
-          className = styles['tab-btn']
-          break
-      }
-
       const onPointerDown = (e: React.PointerEvent) => {
         const elem = e.currentTarget as HTMLElement
         elem.setPointerCapture(e.pointerId)
 
-        if (button.actionHold) {
-          const actionHold = button.actionHold as ExtendedActionHoldConfig
-          if (actionHold.longPressAction) {
+        const { actionHold, action } = button
+
+        if (actionHold) {
+          const { command, longPressAction } = actionHold
+          if (longPressAction) {
             const timerId = window.setTimeout(() => {
               handleLongPress(actionHold)
             }, 500)
             elem.dataset.longPressTimer = String(timerId)
-            handleCommand(actionHold.command, true)
+            handleCommand(command, true)
           } else {
-            handleCommand(button.actionHold as Command, true)
+            handleCommand(command, true)
           }
-        } else {
-          handleCommand(button.action as Command, true)
+        } else if (action) {
+          handleCommand(action, true)
         }
       }
 
@@ -113,15 +141,12 @@ export default () => {
           delete elem.dataset.longPressTimer
         }
 
-        if (button.actionHold) {
-          const actionHold = button.actionHold as ExtendedActionHoldConfig
-          if (actionHold.longPressAction) {
-            handleCommand(actionHold.command, false)
-          } else {
-            handleCommand(button.actionHold as Command, false)
-          }
-        } else {
-          handleCommand(button.action as Command, false)
+        const { actionHold, action } = button
+
+        if (actionHold) {
+          handleCommand(actionHold.command, false)
+        } else if (action) {
+          handleCommand(action, false)
         }
       }
 
