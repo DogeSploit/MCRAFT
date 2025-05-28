@@ -56,11 +56,8 @@
       "label": "Q"
     },
     {
-      "action": "general.f3",
-      "actionHold": {
-        "command": "general.debugOverlay",
-        "longPressAction": "general.debugOverlayHelpMenu"
-      },
+      "action": "general.debugOverlay",
+      "actionHold": "general.debugOverlayHelpMenu",
       "label": "F3"
     },
     {
