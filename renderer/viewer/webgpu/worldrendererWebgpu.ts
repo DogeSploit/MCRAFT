@@ -37,7 +37,7 @@ export class WorldRendererWebgpu extends WorldRendererCommon {
   rendererDevice = '...'
 
   constructor (public initOptions: WebgpuInitOptions, public displayOptions: DisplayWorldOptions) {
-    super(initOptions.resourcesManager, displayOptions, displayOptions.version)
+    super(initOptions.resourcesManager, displayOptions, initOptions)
 
     void this.readyWorkerPromise.then(() => {
       this.addWebgpuListener('rendererProblem', (data) => {

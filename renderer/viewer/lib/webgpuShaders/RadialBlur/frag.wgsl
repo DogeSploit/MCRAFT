@@ -1,8 +1,9 @@
 // Fragment shader
 @group(0) @binding(0) var tex: texture_depth_2d;
- @group(0) @binding(1) var mySampler: sampler;
- @group(0) @binding(2) var texColor: texture_2d<f32>;
- @group(0) @binding(3) var<uniform> clearColor: vec4<f32>;
+@group(0) @binding(1) var mySampler: sampler_comparison;
+@group(0) @binding(2) var texColor: texture_2d<f32>;
+@group(0) @binding(3) var<uniform> clearColor: vec4<f32>;
+@group(0) @binding(4) var colorSampler: sampler;
 const sampleDist : f32 = 1.0;
 const sampleStrength : f32 = 2.2;
 
@@ -39,14 +40,14 @@ fn main(
     var weight = 0.04;
 
     var l = lOff();
-    
+
     var tuv =  uvs-l.xy*.45;
 
     var dTuv = tuv*density/SAMPLES;
 
-    var temp = textureSample(tex,mySampler, uvs);
+    var temp = textureSampleCompare(tex, mySampler, uvs, 1.0);
     var col : f32;
-    var outTex = textureSample(texColor, mySampler, uvs);
+    var outTex = textureSample(texColor, colorSampler, uvs);
     if (temp == 1.0) {
         col = temp * 0.25;
     }
@@ -56,7 +57,7 @@ fn main(
     for(var i=0.0; i < SAMPLES; i += 1){
 
         uvs -= dTuv;
-        var temp = textureSample(tex, mySampler, uvs);
+        var temp = textureSampleCompare(tex, mySampler, uvs, 1.0);
         if (temp == 1.0) {
             col +=temp * weight;
         }

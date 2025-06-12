@@ -694,7 +694,12 @@ export class WebgpuRenderer {
         },
         {
           binding: 1,
-          resource: sampler,
+          resource: device.createSampler({
+            magFilter: 'nearest',
+            minFilter: 'nearest',
+            mipmapFilter: 'nearest',
+            compare: 'less-equal'
+          }),
         },
         {
           binding: 2,
@@ -703,6 +708,14 @@ export class WebgpuRenderer {
         {
           binding: 3,
           resource: { buffer: this.clearColorBuffer },
+        },
+        {
+          binding: 4,
+          resource: device.createSampler({
+            magFilter: 'nearest',
+            minFilter: 'nearest',
+            mipmapFilter: 'nearest'
+          }),
         }
       ]
     })
