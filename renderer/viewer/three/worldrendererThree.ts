@@ -70,9 +70,8 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
   fountains: Fountain[] = []
 
-  private currentPosTween: tweenJs.Tween<THREE.Vector3>
-  private currentRotTween: tweenJs.Tween<{ pitch: number, yaw: number }>
-  //private currentRotTween: tweenJs.Tween<THREE.Euler>
+  private currentPosTween?: tweenJs.Tween<THREE.Vector3>
+  private currentRotTween?: tweenJs.Tween<{ pitch: number, yaw: number }>
 
   get tilesRendered () {
     return Object.values(this.sectionObjects).reduce((acc, obj) => acc + (obj as any).tilesCount, 0)
