@@ -131,9 +131,13 @@ const setSprinting = (state: boolean) => {
   gameAdditionalState.isSprinting = state
 }
 
+const isSpectatingEntity = () => {
+  return appViewer.playerState.reactive.cameraSpectatingEntity !== undefined
+}
+
 contro.on('movementUpdate', ({ vector, soleVector, gamepadIndex }) => {
   // Don't allow movement while spectating an entity
-  if (appViewer.playerState.isSpectatingEntity) return
+  if (isSpectatingEntity()) return
 
   if (gamepadIndex !== undefined && gamepadUiCursorState.display) {
     const deadzone = 0.1 // TODO make deadzone configurable
@@ -344,7 +348,7 @@ const cameraRotationControls = {
   },
   handleCommand (command: string, pressed: boolean) {
     // Don't allow movement while spectating an entity
-    if (appViewer.playerState.isSpectatingEntity) return
+    if (isSpectatingEntity()) return
 
     const directionMap = {
       'general.rotateCameraLeft': 'left',
@@ -378,7 +382,7 @@ const onTriggerOrReleased = (command: Command, pressed: boolean) => {
     // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (command) {
       case 'general.jump':
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         // if (viewer.world.freeFlyMode) {
         //   const moveSpeed = 0.5
         //   viewer.world.freeFlyState.position.add(new Vec3(0, pressed ? moveSpeed : 0, 0))
@@ -553,7 +557,7 @@ contro.on('trigger', ({ command }) => {
         // no-op
         break
       case 'general.swapHands': {
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         bot._client.write('block_dig', {
           'status': 6,
           'location': {
@@ -569,13 +573,13 @@ contro.on('trigger', ({ command }) => {
         // handled in onTriggerOrReleased
         break
       case 'general.inventory':
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         document.exitPointerLock?.()
         openPlayerInventory()
         break
       case 'general.drop': {
-        if (appViewer.playerState.isSpectatingEntity) break
-        // if (bot.heldItem/* && ctrl */) bot.tossStack(bot.heldItem)
+        if (isSpectatingEntity()) break
+        // protocol 1.9+
         bot._client.write('block_dig', {
           'status': 4,
           'location': {
@@ -608,15 +612,15 @@ contro.on('trigger', ({ command }) => {
         showModal({ reactType: 'chat' })
         break
       case 'general.selectItem':
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         void selectItem()
         break
       case 'general.nextHotbarSlot':
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         cycleHotbarSlot(1)
         break
       case 'general.prevHotbarSlot':
-        if (appViewer.playerState.isSpectatingEntity) break
+        if (isSpectatingEntity()) break
         cycleHotbarSlot(-1)
         break
       case 'general.zoom':

@@ -870,15 +870,8 @@ export class Entities {
 
     const meta = getGeneralEntitiesMetadata(entity)
 
-    //@ts-expect-error
-    // set visibility
-<<<<<<< HEAD
-    const isInvisible = entity.metadata?.[0] & 0x20 || this.worldRenderer.playerState.cameraEntity === entity.id
-    for (const child of mesh.children ?? []) {
-=======
-    const isInvisible = entity.metadata?.[0] & 0x20
+    const isInvisible = ((entity.metadata?.[0] ?? 0) as unknown as number) & 0x20 || this.worldRenderer.playerState.reactive.cameraSpectatingEntity === entity.id
     for (const child of mesh!.children ?? []) {
->>>>>>> next
       if (child.name !== 'nametag') {
         child.visible = !isInvisible
       }
