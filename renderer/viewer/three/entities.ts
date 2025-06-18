@@ -870,7 +870,7 @@ export class Entities {
 
     const meta = getGeneralEntitiesMetadata(entity)
 
-    const isInvisible = ((entity.metadata?.[0] ?? 0) as unknown as number) & 0x20 || this.worldRenderer.playerState.reactive.cameraSpectatingEntity === entity.id
+    const isInvisible = ((entity.metadata?.[0] ?? 0) as unknown as number) & 0x20 || (this.worldRenderer.playerStateReactive.cameraSpectatingEntity === entity.id && this.worldRenderer.playerStateUtils.isSpectator())
     for (const child of mesh!.children ?? []) {
       if (child.name !== 'nametag') {
         child.visible = !isInvisible

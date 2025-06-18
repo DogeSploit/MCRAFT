@@ -132,7 +132,7 @@ const setSprinting = (state: boolean) => {
 }
 
 const isSpectatingEntity = () => {
-  return appViewer.playerState.reactive.cameraSpectatingEntity !== undefined
+  return appViewer.playerState.utils.isSpectatingEntity()
 }
 
 contro.on('movementUpdate', ({ vector, soleVector, gamepadIndex }) => {

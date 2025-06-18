@@ -137,7 +137,7 @@ customEvents.on('gameLoaded', () => {
 
   bot._client.on('camera', (packet) => {
     if (bot.player.entity.id === packet.cameraId) {
-      if (appViewer.playerState.reactive.cameraSpectatingEntity !== undefined) {
+      if (appViewer.playerState.utils.isSpectatingEntity() && appViewer.playerState.reactive.cameraSpectatingEntity) {
         const entity = bot.entities[appViewer.playerState.reactive.cameraSpectatingEntity]
         appViewer.playerState.reactive.cameraSpectatingEntity = undefined
         if (entity) {
