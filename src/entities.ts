@@ -210,31 +210,30 @@ customEvents.on('gameLoaded', () => {
     }
   })
 
-  bot.on('teamMemberAdded', (team: Team) => {
-    if (appViewer.playerState.reactive.team?.team !== team.team && team.members.includes(bot.username)) {
+  bot.on('teamMemberAdded', (team: Team, members: string[]) => {
+    if (members.includes(bot.username) && appViewer.playerState.reactive.team?.team !== team.team) {
       appViewer.playerState.reactive.team = team
       // Player was added to a team, need to update all entities that are in a team
       updateAllEntitiesInTeams()
     } else {
-      // Need to update all entities that are in a team as we don't know which was added
+      // Need to update all entities that were added
       for (const entity of Object.values(bot.entities)) {
-        if (entity.type === 'player' && entity.username && team.members.includes(entity.username) || entity.uuid && team.members.includes(entity.uuid)) {
+        if (entity.type === 'player' && entity.username && members.includes(entity.username) || entity.uuid && members.includes(entity.uuid)) {
           bot.emit('entityUpdate', entity)
         }
       }
     }
   })
 
-  bot.on('teamMemberRemoved', (team: Team) => {
-    if (appViewer.playerState.reactive.team?.team === team.team && !team.members.includes(bot.username)) {
+  bot.on('teamMemberRemoved', (team: Team, members: string[]) => {
+    if (members.includes(bot.username) && appViewer.playerState.reactive.team?.team === team.team) {
       appViewer.playerState.reactive.team = undefined
       // Player was removed from a team, need to update all entities that are in a team
       updateAllEntitiesInTeams()
     } else {
-      // Need to update all entities that are not in a team as we don't know which were removed
+      // Need to update all entities that were removed
       for (const entity of Object.values(bot.entities)) {
-        const entityTeam = entity.type === 'player' && entity.username ? bot.teamMap[entity.username] : entity.uuid ? bot.teamMap[entity.uuid] : undefined
-        if (!entityTeam) {
+        if (entity.type === 'player' && entity.username && members.includes(entity.username) || entity.uuid && members.includes(entity.uuid)) {
           bot.emit('entityUpdate', entity)
         }
       }
