@@ -88,7 +88,7 @@ const defaultOptions = {
   alwaysShowMobileControls: false,
   excludeCommunicationDebugEvents: [],
   preventDevReloadWhilePlaying: false,
-  numWorkers: 4,
+  numWorkers: 2,
   localServerOptions: {
     gameMode: 1
   } as any,
