@@ -19,14 +19,14 @@ import { Vec3 } from 'vec3'
 import { Team } from 'mineflayer'
 import { EntityMetadataVersions } from '../../../src/mcDataTypes'
 import { ItemSpecificContextProperties } from '../lib/basePlayerState'
-import { loadSkinImage, loadSkinFromUsername, stevePngUrl, steveTexture } from '../lib/utils/skins'
+import { loadSkinImage, loadSkinFromUsername, stevePngUrl, steveTexture, createCanvas } from '../lib/utils/skins'
 import { loadTexture } from '../lib/utils'
 import { getBlockMeshFromModel } from './holdingBlock'
 import * as Entity from './entity/EntityMesh'
 import { getMesh } from './entity/EntityMesh'
 import { WalkingGeneralSwing } from './entity/animations'
 import { disposeObject } from './threeJsUtils'
-import { armorModel, armorTextures } from './entity/armorModels'
+import { armorModel, elytraTexture, armorTextures } from './entity/armorModels'
 import { WorldRendererThree } from './worldrendererThree'
 
 export const TWEEN_DURATION = 120
@@ -97,7 +97,7 @@ function getUsernameTexture ({
   nameTagBackgroundColor = 'rgba(0, 0, 0, 0.3)',
   nameTagTextOpacity = 255
 }: any, { fontFamily = 'sans-serif' }: any) {
-  const canvas = new OffscreenCanvas(64, 64)
+  const canvas = createCanvas(64, 64)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not get 2d context')
 
@@ -215,6 +215,7 @@ export type SceneEntity = THREE.Object3D & {
 
 export class Entities {
   entities = {} as Record<string, SceneEntity>
+  playerEntity: SceneEntity | null = null // Special entity for the player in third person
   entitiesOptions = {
     fontFamily: 'mojangles'
   }
@@ -255,12 +256,49 @@ export class Entities {
     this.watchResourcesUpdates()
   }
 
+  handlePlayerEntity (playerData: SceneEntity['originalEntity']) {
+    // Create player entity if it doesn't exist
+    if (!this.playerEntity) {
+      // Create the player entity similar to how normal entities are created
+      const group = new THREE.Group() as unknown as SceneEntity
+      group.originalEntity = { ...playerData, name: 'player' } as SceneEntity['originalEntity']
+
+      const wrapper = new THREE.Group()
+      const playerObject = this.setupPlayerObject(playerData, wrapper, {})
+      group.playerObject = playerObject
+      group.add(wrapper)
+
+      group.name = 'player_entity'
+      this.playerEntity = group
+      this.worldRenderer.scene.add(group)
+
+      void this.updatePlayerSkin(playerData.id, playerData.username, playerData.uuid ?? undefined, stevePngUrl)
+    }
+
+    // Update position and rotation
+    if (playerData.position) {
+      this.playerEntity.position.set(playerData.position.x, playerData.position.y, playerData.position.z)
+    }
+    if (playerData.yaw !== undefined) {
+      this.playerEntity.rotation.y = playerData.yaw
+    }
+
+    this.updateEntityEquipment(this.playerEntity, playerData)
+  }
+
   clear () {
     for (const mesh of Object.values(this.entities)) {
       this.worldRenderer.scene.remove(mesh)
       disposeObject(mesh)
     }
     this.entities = {}
+
+    // Clean up player entity
+    if (this.playerEntity) {
+      this.worldRenderer.scene.remove(this.playerEntity)
+      disposeObject(this.playerEntity)
+      this.playerEntity = null
+    }
   }
 
   reloadEntities () {
@@ -307,20 +345,18 @@ export class Entities {
     }
 
     const dt = this.clock.getDelta()
-    const botPos = this.worldRenderer.viewerPosition
+    const botPos = this.worldRenderer.viewerChunkPosition
     const VISIBLE_DISTANCE = 10 * 10
 
-    for (const entityId of Object.keys(this.entities)) {
-      const entity = this.entities[entityId]
+    // Update regular entities
+    for (const [entityId, entity] of [...Object.entries(this.entities), ['player_entity', this.playerEntity] as [string, SceneEntity | null]]) {
+      if (!entity) continue
       const { playerObject } = entity
 
       // Update animations
       if (playerObject?.animation) {
         playerObject.animation.update(playerObject, dt)
       }
-
-      // Update armor positions
-      this.syncArmorPositions(entity)
 
       // Update visibility based on distance and chunk load status
       if (botPos && entity.position) {
@@ -333,6 +369,32 @@ export class Entities {
         entity.visible = !!(distanceSquared < VISIBLE_DISTANCE || this.worldRenderer.shouldObjectVisible(entity))
 
         this.maybeRenderPlayerSkin(entityId)
+      }
+
+      if (entity.visible) {
+        // Update armor positions
+        this.syncArmorPositions(entity)
+      }
+
+      if (entityId === 'player_entity') {
+        entity.visible = this.worldRenderer.playerStateUtils.isThirdPerson()
+
+        if (entity.visible) {
+          // sync
+          const yOffset = this.worldRenderer.playerStateReactive.eyeHeight
+          const pos = this.worldRenderer.cameraObject.position.clone().add(new THREE.Vector3(0, -yOffset, 0))
+          entity.position.set(pos.x, pos.y, pos.z)
+
+          const rotation = this.worldRenderer.cameraShake.getBaseRotation()
+          entity.rotation.set(0, rotation.yaw, 0)
+
+          // Sync head rotation
+          entity.traverse((c) => {
+            if (c.name === 'head') {
+              c.rotation.set(-rotation.pitch, 0, 0)
+            }
+          })
+        }
       }
     }
   }
@@ -411,6 +473,7 @@ export class Entities {
   }
 
   getPlayerObject (entityId: string | number) {
+    if (this.playerEntity?.originalEntity.id === entityId) return this.playerEntity?.playerObject
     const playerObject = this.entities[entityId]?.playerObject
     return playerObject
   }
@@ -488,7 +551,7 @@ export class Entities {
       let skinCanvas: OffscreenCanvas
       if (skinUrl === stevePngUrl) {
         skinTexture = await steveTexture
-        const canvas = new OffscreenCanvas(64, 64)
+        const canvas = createCanvas(64, 64)
         const ctx = canvas.getContext('2d')
         if (!ctx) throw new Error('Failed to get context')
         ctx.drawImage(skinTexture.image, 0, 0)
@@ -569,21 +632,63 @@ export class Entities {
   }
 
   playAnimation (entityPlayerId, animation: 'walking' | 'running' | 'oneSwing' | 'idle' | 'crouch' | 'crouchWalking') {
-    const playerObject = this.getPlayerObject(entityPlayerId)
-    if (!playerObject) return
+    // TODO CLEANUP!
+    // Handle special player entity ID for bot entity in third person
+    if (entityPlayerId === 'player_entity' && this.playerEntity?.playerObject) {
+      const { playerObject } = this.playerEntity
+      if (animation === 'oneSwing') {
+        if (!(playerObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
+        playerObject.animation.swingArm()
+        return
+      }
 
-    if (animation === 'oneSwing') {
-      if (!(playerObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
-      playerObject.animation.swingArm()
+      if (playerObject.animation instanceof WalkingGeneralSwing) {
+        playerObject.animation.switchAnimationCallback = () => {
+          if (!(playerObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
+          playerObject.animation.isMoving = animation === 'walking' || animation === 'running' || animation === 'crouchWalking'
+          playerObject.animation.isRunning = animation === 'running'
+          playerObject.animation.isCrouched = animation === 'crouch' || animation === 'crouchWalking'
+        }
+      }
       return
     }
 
-    if (playerObject.animation instanceof WalkingGeneralSwing) {
-      playerObject.animation.switchAnimationCallback = () => {
+    // Handle regular entities
+    const playerObject = this.getPlayerObject(entityPlayerId)
+    if (playerObject) {
+      if (animation === 'oneSwing') {
         if (!(playerObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
-        playerObject.animation.isMoving = animation === 'walking' || animation === 'running' || animation === 'crouchWalking'
-        playerObject.animation.isRunning = animation === 'running'
-        playerObject.animation.isCrouched = animation === 'crouch' || animation === 'crouchWalking'
+        playerObject.animation.swingArm()
+        return
+      }
+
+      if (playerObject.animation instanceof WalkingGeneralSwing) {
+        playerObject.animation.switchAnimationCallback = () => {
+          if (!(playerObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
+          playerObject.animation.isMoving = animation === 'walking' || animation === 'running' || animation === 'crouchWalking'
+          playerObject.animation.isRunning = animation === 'running'
+          playerObject.animation.isCrouched = animation === 'crouch' || animation === 'crouchWalking'
+        }
+      }
+      return
+    }
+
+    // Handle player entity (for third person view) - fallback for backwards compatibility
+    if (this.playerEntity?.playerObject) {
+      const { playerObject: playerEntityObject } = this.playerEntity
+      if (animation === 'oneSwing') {
+        if (!(playerEntityObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
+        playerEntityObject.animation.swingArm()
+        return
+      }
+
+      if (playerEntityObject.animation instanceof WalkingGeneralSwing) {
+        playerEntityObject.animation.switchAnimationCallback = () => {
+          if (!(playerEntityObject.animation instanceof WalkingGeneralSwing)) throw new Error('Expected WalkingGeneralSwing')
+          playerEntityObject.animation.isMoving = animation === 'walking' || animation === 'running' || animation === 'crouchWalking'
+          playerEntityObject.animation.isRunning = animation === 'running'
+          playerEntityObject.animation.isCrouched = animation === 'crouch' || animation === 'crouchWalking'
+        }
       }
     }
   }
@@ -783,23 +888,10 @@ export class Entities {
           }
         }
       } else if (isPlayerModel) {
-        // CREATE NEW PLAYER ENTITY
         const wrapper = new THREE.Group()
-        const playerObject = new PlayerObject() as PlayerObjectType
-        playerObject.realPlayerUuid = entity.uuid ?? ''
-        playerObject.realUsername = entity.username ?? ''
-        playerObject.position.set(0, 16, 0)
-
-        // fix issues with starfield
-        playerObject.traverse((obj) => {
-          if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshStandardMaterial) {
-            obj.material.transparent = true
-          }
-        })
-        //@ts-expect-error
-        wrapper.add(playerObject)
-        const scale = 1 / 16
-        wrapper.scale.set(scale, scale, scale)
+        const playerObject = this.setupPlayerObject(entity, wrapper, overrides)
+        group.playerObject = playerObject
+        mesh = wrapper
 
         if (entity.username) {
           // todo proper colors
@@ -814,13 +906,6 @@ export class Entities {
           //@ts-expect-error
           wrapper.add(nameTag)
         }
-
-        group.playerObject = playerObject
-        wrapper.rotation.set(0, Math.PI, 0)
-        mesh = wrapper
-        playerObject.animation = new WalkingGeneralSwing()
-        //@ts-expect-error
-        playerObject.animation.isMoving = false
       } else {
         mesh = getEntityMesh(entity, this.worldRenderer, this.entitiesOptions, overrides)
       }
@@ -860,16 +945,8 @@ export class Entities {
       mesh = e.children.find(c => c.name === 'mesh')
     }
 
-    // check if entity has armor
-    if (entity.equipment) {
-      const isPlayer = entity.type === 'player'
-      this.addItemModel(e, isPlayer ? 'right' : 'left', entity.equipment[0], isPlayer)
-      this.addItemModel(e, isPlayer ? 'left' : 'right', entity.equipment[1], isPlayer)
-      addArmorModel(this.worldRenderer, e, 'feet', entity.equipment[2])
-      addArmorModel(this.worldRenderer, e, 'legs', entity.equipment[3], 2)
-      addArmorModel(this.worldRenderer, e, 'chest', entity.equipment[4])
-      addArmorModel(this.worldRenderer, e, 'head', entity.equipment[5])
-    }
+    // Update equipment
+    this.updateEntityEquipment(e, entity)
 
     const meta = getGeneralEntitiesMetadata(entity)
 
@@ -1037,7 +1114,7 @@ export class Entities {
       }
     }
 
-    if (entity.username) {
+    if (entity.username !== undefined) {
       e.username = entity.username
     }
 
@@ -1080,13 +1157,17 @@ export class Entities {
 
   loadedSkinEntityIds = new Set<string>()
   maybeRenderPlayerSkin (entityId: string) {
-    const mesh = this.entities[entityId]
+    let mesh = this.entities[entityId]
+    if (entityId === 'player_entity') {
+      mesh = this.playerEntity!
+      entityId = this.playerEntity?.originalEntity.id as any
+    }
     if (!mesh) return
     if (!mesh.playerObject) return
     if (!mesh.visible) return
 
     const MAX_DISTANCE_SKIN_LOAD = 128
-    const cameraPos = this.worldRenderer.camera.position
+    const cameraPos = this.worldRenderer.cameraObject.position
     const distance = mesh.position.distanceTo(cameraPos)
     if (distance < MAX_DISTANCE_SKIN_LOAD && distance < (this.worldRenderer.viewDistance * 16)) {
       if (this.loadedSkinEntityIds.has(entityId)) return
@@ -1253,12 +1334,62 @@ export class Entities {
     }
   }
 
-  raycastScene () {
+  raycastSceneDebug () {
     // return any object from scene. raycast from camera
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(new THREE.Vector2(0, 0), this.worldRenderer.camera)
     const intersects = raycaster.intersectObjects(this.worldRenderer.scene.children)
     return intersects[0]?.object
+  }
+
+  private setupPlayerObject (entity: SceneEntity['originalEntity'], wrapper: THREE.Group, overrides: { texture?: string }): PlayerObjectType {
+    const playerObject = new PlayerObject() as PlayerObjectType
+    playerObject.realPlayerUuid = entity.uuid ?? ''
+    playerObject.realUsername = entity.username ?? ''
+    playerObject.position.set(0, 16, 0)
+
+    // fix issues with starfield
+    playerObject.traverse((obj) => {
+      if (obj instanceof THREE.Mesh && obj.material instanceof THREE.MeshStandardMaterial) {
+        obj.material.transparent = true
+      }
+    })
+
+    wrapper.add(playerObject as any)
+    const scale = 1 / 16
+    wrapper.scale.set(scale, scale, scale)
+    wrapper.rotation.set(0, Math.PI, 0)
+
+    // Set up animation
+    playerObject.animation = new WalkingGeneralSwing()
+    //@ts-expect-error
+    playerObject.animation.isMoving = false
+
+    return playerObject
+  }
+
+  private updateEntityEquipment (entityMesh: SceneEntity, entity: SceneEntity['originalEntity']) {
+    if (!entityMesh || !entity.equipment) return
+
+    const isPlayer = entity.type === 'player'
+    this.addItemModel(entityMesh, isPlayer ? 'right' : 'left', entity.equipment[0], isPlayer)
+    this.addItemModel(entityMesh, isPlayer ? 'left' : 'right', entity.equipment[1], isPlayer)
+    addArmorModel(this.worldRenderer, entityMesh, 'feet', entity.equipment[2])
+    addArmorModel(this.worldRenderer, entityMesh, 'legs', entity.equipment[3], 2)
+    addArmorModel(this.worldRenderer, entityMesh, 'chest', entity.equipment[4])
+    addArmorModel(this.worldRenderer, entityMesh, 'head', entity.equipment[5])
+
+    // Update player-specific equipment
+    if (isPlayer && entityMesh.playerObject) {
+      const { playerObject } = entityMesh
+      playerObject.backEquipment = entity.equipment.some((item) => item?.name === 'elytra') ? 'elytra' : 'cape'
+      if (playerObject.backEquipment === 'elytra') {
+        void this.loadAndApplyCape(entity.id, elytraTexture)
+      }
+      if (playerObject.cape.map === null) {
+        playerObject.cape.visible = false
+      }
+    }
   }
 }
 

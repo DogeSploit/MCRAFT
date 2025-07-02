@@ -23,7 +23,7 @@ import { MessageFormatPart } from './chatUtils'
 import { GeneralInputItem, getItemMetadata, getItemModelName, getItemNameRaw, RenderItem } from './mineflayer/items'
 import { playerState } from './mineflayer/playerState'
 
-const loadedImagesCache = new Map<string, HTMLImageElement>()
+const loadedImagesCache = new Map<string, HTMLImageElement | ImageBitmap>()
 const cleanLoadedImagesCache = () => {
   loadedImagesCache.delete('blocks')
   loadedImagesCache.delete('items')
@@ -132,11 +132,12 @@ export const onGameLoad = () => {
   }
 }
 
-const getImageSrc = (path): string | HTMLImageElement => {
+const getImageSrc = (path): string | HTMLImageElement | ImageBitmap => {
   switch (path) {
     case 'gui/container/inventory': return appReplacableResources.latest_gui_container_inventory.content
     case 'blocks': return appViewer.resourcesManager.blocksAtlasParser.latestImage
     case 'items': return appViewer.resourcesManager.itemsAtlasParser.latestImage
+    case 'gui': return appViewer.resourcesManager.currentResources!.guiAtlas!.image
     case 'gui/container/dispenser': return appReplacableResources.latest_gui_container_dispenser.content
     case 'gui/container/furnace': return appReplacableResources.latest_gui_container_furnace.content
     case 'gui/container/crafting_table': return appReplacableResources.latest_gui_container_crafting_table.content
@@ -159,12 +160,20 @@ const getImage = ({ path = undefined as string | undefined, texture = undefined 
   if (image) {
     return image
   }
-  if (!path && !texture) throw new Error('Either pass path or texture')
+  if (!path && !texture) {
+    throw new Error('Either pass path or texture')
+  }
   const loadPath = (blockData ? 'blocks' : path ?? texture)!
   if (loadedImagesCache.has(loadPath)) {
     onLoad()
   } else {
     const imageSrc = getImageSrc(loadPath)
+    if (imageSrc instanceof ImageBitmap) {
+      onLoad()
+      loadedImagesCache.set(loadPath, imageSrc)
+      return imageSrc
+    }
+
     let image: HTMLImageElement
     if (imageSrc instanceof Image) {
       image = imageSrc
@@ -201,6 +210,11 @@ const itemToVisualKey = (slot: RenderItem | Item | null) => {
   ].join('|')
   return keys
 }
+const validateSlot = (slot: any, index: number) => {
+  if (!slot.texture) {
+    throw new Error(`Slot has no texture: ${index} ${slot.name}`)
+  }
+}
 const mapSlots = (slots: Array<RenderItem | Item | null>, isJei = false) => {
   const newSlots = slots.map((slot, i) => {
     if (!slot) return null
@@ -210,6 +224,7 @@ const mapSlots = (slots: Array<RenderItem | Item | null>, isJei = false) => {
       const newKey = itemToVisualKey(slot)
       slot['cacheKey'] = i + '|' + newKey
       if (oldKey && oldKey === newKey) {
+        validateSlot(lastMappedSlots[i], i)
         return lastMappedSlots[i]
       }
     }
@@ -228,12 +243,13 @@ const mapSlots = (slots: Array<RenderItem | Item | null>, isJei = false) => {
         const { icon, ...rest } = slot
         return rest
       }
+      validateSlot(slot, i)
     } catch (err) {
       inGameError(err)
     }
     return slot
   })
-  lastMappedSlots = newSlots
+  lastMappedSlots = JSON.parse(JSON.stringify(newSlots))
   return newSlots
 }
 
@@ -268,6 +284,7 @@ const implementedContainersGuiMap = {
   'minecraft:generic_3x3': 'DropDispenseWin',
   'minecraft:furnace': 'FurnaceWin',
   'minecraft:smoker': 'FurnaceWin',
+  'minecraft:shulker_box': 'ChestWin',
   'minecraft:blast_furnace': 'FurnaceWin',
   'minecraft:crafting': 'CraftingWin',
   'minecraft:crafting3x3': 'CraftingWin', // todo different result slot
@@ -358,7 +375,7 @@ const openWindow = (type: string | undefined) => {
     lastWindow.destroy()
     lastWindow = null as any
     lastWindowType = null
-    window.lastWindow = lastWindow
+    window.inventory = null
     miscUiState.displaySearchInput = false
     destroyFn()
     skipClosePacketSending = false
@@ -366,6 +383,7 @@ const openWindow = (type: string | undefined) => {
   cleanLoadedImagesCache()
   const inv = openItemsCanvas(type)
   inv.canvasManager.children[0].mobileHelpers = miscUiState.currentTouch
+  window.inventory = inv
   const title = bot.currentWindow?.title
   const PrismarineChat = PrismarineChatLoader(bot.version)
   try {
