@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { appQueryParams } from '../appParams'
 import styles from './appStatus.module.css'
-import Button from './Button'
 import Screen from './Screen'
 import LoadingChunks from './LoadingChunks'
 
@@ -10,7 +9,6 @@ export default ({
   isError,
   hideDots = false,
   lastStatus = '',
-  backAction = undefined as undefined | (() => void),
   description = '' as string | JSX.Element,
   actionsSlot = null as React.ReactNode | null,
   showReconnect = false,
@@ -66,19 +64,6 @@ export default ({
       }
       backdrop='dirt'
     >
-      {isError && (
-        <>
-          {/* @pranaygp - keeping this screen simple for kradle users */}
-          {/* {showReconnect && onReconnect && <Button onClick={onReconnect}>
-            <b>Reconnect</b>
-          </Button>}
-          {actionsSlot} */}
-          <Button onClick={() => window.location.reload()}>
-            <b>Reconnect</b>
-          </Button>
-          {backAction && <Button label="Back" onClick={backAction} />}
-        </>
-      )}
       {children}
     </Screen>
   )

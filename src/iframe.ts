@@ -17,9 +17,17 @@ type IFrameSendablePayload =
       progress: number; // 0.0 to 1.0
       percentage: number; // 0 to 100
       recordingName?: string; // e.g. "2025-07-04--00-41-17"
+    }
+  | {
+      source: "minecraft-web-client";
+      action: "connectionStatus";
+      status: "connected" | "connecting" | "disconnected" | "error" | "kicked";
+      message: string; // Human-readable status message
+      errorDetails?: string; // Additional error information when applicable
+      canReconnect: boolean; // Whether reconnection is possible
     };
 
-type ReceivableActions = "followPlayer" | "command";
+type ReceivableActions = "followPlayer" | "command" | "reconnect";
 
 export function setupIframeComms() {
   // Handle incoming messages from kradle frontend
@@ -65,6 +73,27 @@ export function setupIframeComms() {
     const formattedCommand = `/${command.replace(/^\//, "")}`;
     console.log("[packet-monitor] Sending command to bot:", formattedCommand);
     bot.chat(formattedCommand);
+  });
+
+  // Handle reconnect command from parent app
+  customEvents.on("kradle:reconnect", () => {
+    console.log("[iframe-rpc] Reconnect command received from parent");
+    if (typeof window !== "undefined" && window.lastConnectOptions?.value) {
+      // Use existing reconnect functionality
+      window.dispatchEvent(new window.CustomEvent('connect', {
+        detail: window.lastConnectOptions.value
+      }));
+    } else {
+      console.error("[iframe-rpc] No connection options available for reconnect");
+    }
+  });
+
+  // Handle connection status reporting
+  customEvents.on("connectionStatus", (statusData) => {
+    sendMessageToKradle({
+      action: "connectionStatus",
+      ...statusData
+    });
   });
 
   // Setup packet monitoring for replay information

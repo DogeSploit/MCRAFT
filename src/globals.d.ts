@@ -33,6 +33,13 @@ declare const customEvents: import('typed-emitter').default<{
   followingPlayer (username?: string): void // when following has begun
   'kradle:command' (data: any): void // a command to run as the bot
   'kradle:followPlayer' (data: any): void // request from kradle to follow a player
+  'kradle:reconnect' (): void // request from kradle to reconnect
+  connectionStatus (statusData: {
+    status: "connected" | "connecting" | "disconnected" | "error" | "kicked";
+    message: string;
+    errorDetails?: string;
+    canReconnect: boolean;
+  }): void // report connection status to parent app
 }>
 declare const beforeRenderFrame: Array<() => void>
 
