@@ -80,11 +80,15 @@ export function setupIframeComms() {
     console.log("[iframe-rpc] Reconnect command received from parent");
     if (typeof window !== "undefined" && window.lastConnectOptions?.value) {
       // Use existing reconnect functionality
-      window.dispatchEvent(new window.CustomEvent('connect', {
-        detail: window.lastConnectOptions.value
-      }));
+      window.dispatchEvent(
+        new window.CustomEvent("connect", {
+          detail: window.lastConnectOptions.value,
+        })
+      );
     } else {
-      console.error("[iframe-rpc] No connection options available for reconnect");
+      console.error(
+        "[iframe-rpc] No connection options available for reconnect"
+      );
     }
   });
 
@@ -92,7 +96,7 @@ export function setupIframeComms() {
   customEvents.on("connectionStatus", (statusData) => {
     sendMessageToKradle({
       action: "connectionStatus",
-      ...statusData
+      ...statusData,
     });
   });
 
