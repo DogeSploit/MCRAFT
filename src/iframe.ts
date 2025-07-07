@@ -76,8 +76,8 @@ export function setupIframeComms() {
   });
 
   // Handle reconnect command from parent app
-  customEvents.on("kradle:reconnect", () => {
-    console.log("[iframe-rpc] Reconnect command received from parent");
+  customEvents.on("kradle:reconnect", (data) => {
+    console.log("[iframe-rpc] Reconnect command received from parent ", data);
     if (typeof window !== "undefined" && window.lastConnectOptions?.value) {
       // Use existing reconnect functionality
       window.dispatchEvent(

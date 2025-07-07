@@ -154,7 +154,6 @@ export default () => {
       }{
         minecraftJsonMessage && <MessageFormattedString message={minecraftJsonMessage} />
       }</>}
-      backAction={backAction}
       actionsSlot={
         <>
           {displayAuthButton && <Button label='Authenticate' onClick={authReconnectAction} />}
