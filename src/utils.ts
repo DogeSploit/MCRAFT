@@ -154,7 +154,9 @@ export const setRenderDistance = () => {
 export const reloadChunks = async () => {
   if (!worldView) return
   setRenderDistance()
-  await worldView.updatePosition(following.position, true)
+  // Following can be either Bot or Player - Bot has entity.position, Player has position
+  const position = (following as any).entity?.position || (following as any).position
+  await worldView.updatePosition(position, true)
 }
 
 export const openGithub = (addUrl = '') => {
