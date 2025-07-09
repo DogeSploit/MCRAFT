@@ -144,9 +144,9 @@ export const renderComponent = (
     }
     visibleFormatting = visibleFormatting || formatting.underlined || formatting.strikethrough || false
     if (text?.includes('\n')) {
-      for (const [i, line] of text.split('\n').entries()) {
-        textOffset += fontSize * i
+      for (const line of text.split('\n')) {
         addTextPart(line, formatting)
+        textOffset += fontSize
         plainText = ''
       }
     } else if (text) {
