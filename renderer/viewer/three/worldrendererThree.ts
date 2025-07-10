@@ -425,7 +425,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     this.scene.add(object)
   }
 
-  getSignTexture (position: Vec3, blockEntity, backSide = false) {
+  getSignTexture (position: Vec3, blockEntity, isHanging, backSide = false) {
     const chunk = chunkPos(position)
     let textures = this.chunkTextures.get(`${chunk[0]},${chunk[1]}`)
     if (!textures) {
@@ -437,7 +437,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     if (textures[texturekey]) return textures[texturekey]
 
     const PrismarineChat = PrismarineChatLoader(this.version)
-    const canvas = renderSign(blockEntity, PrismarineChat)
+    const canvas = renderSign(blockEntity, isHanging, PrismarineChat)
     if (!canvas) return
     const tex = new THREE.Texture(canvas)
     tex.magFilter = THREE.NearestFilter
@@ -783,7 +783,7 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   renderSign (position: Vec3, rotation: number, isWall: boolean, isHanging: boolean, blockEntity) {
-    const tex = this.getSignTexture(position, blockEntity)
+    const tex = this.getSignTexture(position, blockEntity, isHanging)
 
     if (!tex) return
 

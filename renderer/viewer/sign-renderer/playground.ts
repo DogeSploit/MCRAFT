@@ -21,7 +21,7 @@ const blockEntity = {
 
 await document.fonts.load('1em mojangles')
 
-const canvas = renderSign(blockEntity, PrismarineChat, (ctx) => {
+const canvas = renderSign(blockEntity, false, PrismarineChat, (ctx) => {
   ctx.drawImage(img, 0, 0, ctx.canvas.width, ctx.canvas.height)
 }, (width, height) => {
   const canvas = document.createElement('canvas')

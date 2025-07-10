@@ -53,6 +53,7 @@ const LEGACY_COLORS = {
 
 export const renderSign = (
   blockEntity: SignBlockEntity,
+  isHanging: boolean,
   PrismarineChat: typeof ChatMessage,
   ctxHook = (ctx) => { },
   canvasCreator = (width, height): OffscreenCanvas => { return createCanvas(width, height) }
@@ -85,7 +86,7 @@ export const renderSign = (
   const defaultColor = ('front_text' in blockEntity ? blockEntity.front_text.color : blockEntity.Color) || 'black'
   for (const [lineNum, text] of texts.slice(0, 4).entries()) {
     if (text === 'null') continue
-    renderComponent(text, PrismarineChat, canvas, fontSize, defaultColor, fontSize * (lineNum + 1))
+    renderComponent(text, PrismarineChat, canvas, fontSize, defaultColor, fontSize * (lineNum + 1) + (isHanging ? 0 : -8))
   }
   return canvas
 }
