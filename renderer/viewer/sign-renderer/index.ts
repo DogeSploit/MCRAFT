@@ -1,5 +1,5 @@
 import type { ChatMessage } from 'prismarine-chat'
-import { createCanvas } from '../lib/utils/skins'
+import { createCanvas } from '../lib/utils'
 
 type SignBlockEntity = {
   Color?: string

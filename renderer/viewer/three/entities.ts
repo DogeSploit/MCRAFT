@@ -1,11 +1,10 @@
 //@ts-check
-import EventEmitter from 'events'
 import { UnionToIntersection } from 'type-fest'
 import nbt from 'prismarine-nbt'
 import * as TWEEN from '@tweenjs/tween.js'
 import * as THREE from 'three'
-import { PlayerObject, PlayerAnimation } from 'skinview3d'
-import { loadSkinToCanvas, loadEarsToCanvasFromSkin, inferModelType, loadCapeToCanvas, loadImage } from 'skinview-utils'
+import { PlayerAnimation, PlayerObject } from 'skinview3d'
+import { inferModelType, loadCapeToCanvas, loadEarsToCanvasFromSkin } from 'skinview-utils'
 // todo replace with url
 import { degreesToRadians } from '@nxg-org/mineflayer-tracker/lib/mathUtils'
 import { NameTagObject } from 'skinview3d/libs/nametag'
@@ -13,23 +12,23 @@ import { flat, fromFormattedString } from '@xmcl/text-component'
 import mojangson from 'mojangson'
 import { snakeCase } from 'change-case'
 import { Item } from 'prismarine-item'
-import { BlockModel } from 'mc-assets'
 import { isEntityAttackable } from 'mineflayer-mouse/dist/attackableEntity'
-import { Vec3 } from 'vec3'
 import { Team } from 'mineflayer'
 import PrismarineChatLoader from 'prismarine-chat'
 import { EntityMetadataVersions } from '../../../src/mcDataTypes'
 import { ItemSpecificContextProperties } from '../lib/basePlayerState'
-import { loadSkinImage, loadSkinFromUsername, stevePngUrl, steveTexture, createCanvas } from '../lib/utils/skins'
-import { loadTexture } from '../lib/utils'
+import { loadSkinFromUsername, loadSkinImage, stevePngUrl } from '../lib/utils/skins'
 import { renderComponent } from '../sign-renderer'
+import { createCanvas } from '../lib/utils'
 import { getBlockMeshFromModel } from './holdingBlock'
 import * as Entity from './entity/EntityMesh'
 import { getMesh } from './entity/EntityMesh'
 import { WalkingGeneralSwing } from './entity/animations'
-import { disposeObject } from './threeJsUtils'
-import { armorModel, elytraTexture, armorTextures } from './entity/armorModels'
+import { disposeObject, loadTexture, loadThreeJsTextureFromUrl } from './threeJsUtils'
+import { armorModel, armorTextures, elytraTexture } from './entity/armorModels'
 import { WorldRendererThree } from './worldrendererThree'
+
+export const steveTexture = loadThreeJsTextureFromUrl(stevePngUrl)
 
 export const TWEEN_DURATION = 120
 
