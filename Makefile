@@ -1,7 +1,7 @@
 REGION=us-central1
 PROJECT_ID=mckradle-3c267
-DOCKER_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${env}-minecraft/web-proxy
-IMAGE_TAG=${DOCKER_URL}:latest
+DOCKER_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${env}-arenas/web-viewer-client
+IMAGE_TAG=${DOCKER_URL}:266e4b3
 SERVICE_NAME=web-proxy
 
 ifndef env
@@ -12,7 +12,7 @@ docker/login:
 	gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
 docker/build:
-	docker buildx build --platform linux/amd64 . -f Dockerfile.proxy --load -t ${IMAGE_TAG}
+	docker buildx build --platform linux/amd64,linux/arm64 . -f Dockerfile --load -t ${IMAGE_TAG}
 
 docker/push:
 	docker push ${IMAGE_TAG}
