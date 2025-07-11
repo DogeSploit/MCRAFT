@@ -1,7 +1,7 @@
 REGION=us-central1
 PROJECT_ID=mckradle-3c267
 DOCKER_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${env}-arenas/web-viewer-client
-IMAGE_TAG=${DOCKER_URL}:266e4b3
+IMAGE_TAG=${DOCKER_URL}:$(shell git rev-parse --short HEAD)
 SERVICE_NAME=web-proxy
 
 ifndef env
