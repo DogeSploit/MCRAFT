@@ -27,7 +27,7 @@ type IFrameSendablePayload =
     canReconnect: boolean; // Whether reconnection is possible
   }
 
-type ReceivableActions = 'followPlayer' | 'command' | 'reconnect'
+type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins'
 
 export function setupIframeComms () {
   // Handle incoming messages from kradle frontend
@@ -88,6 +88,27 @@ export function setupIframeComms () {
       console.error(
         '[iframe-rpc] No connection options available for reconnect'
       )
+    }
+  })
+
+  // Handle agent skin data from parent app
+  customEvents.on('kradle:setAgentSkins', (data) => {
+    console.log('[iframe-rpc] Agent skin data received from parent', data)
+    // Store agent skin data globally for use by entities
+    // Use both agentId and username as keys for maximum compatibility
+    if (window.agentSkinMap) {
+      window.agentSkinMap.clear()
+    } else {
+      window.agentSkinMap = new Map()
+    }
+    
+    if (data.agentSkins) {
+      data.agentSkins.forEach((agentSkin) => {
+        if (agentSkin.username && agentSkin.skinUrl) {
+          // Primary mapping: username -> skinUrl
+          window.agentSkinMap.set(agentSkin.username, agentSkin.skinUrl)
+        }
+      })
     }
   })
 

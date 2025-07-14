@@ -8,11 +8,33 @@ export const steveTexture = new THREE.TextureLoader().loadAsync(stevePng)
 
 export async function loadImageFromUrl (imageUrl: string): Promise<HTMLImageElement> {
   const img = new Image()
-  img.src = imageUrl
-  await new Promise<void>(resolve => {
-    img.onload = () => resolve()
+  
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`Image load timeout: ${imageUrl}`))
+    }, 10000) // 10 second timeout
+    
+    img.onload = () => {
+      clearTimeout(timeout)
+      resolve(img)
+    }
+    
+    img.onerror = (error) => {
+      clearTimeout(timeout)
+      reject(new Error(`Failed to load image: ${imageUrl}. Error: ${error}`))
+    }
+    
+    img.onabort = () => {
+      clearTimeout(timeout)
+      reject(new Error(`Image load aborted: ${imageUrl}`))
+    }
+    
+    // Enable CORS if needed
+    img.crossOrigin = 'anonymous'
+    
+    // Set the source last to start loading
+    img.src = imageUrl
   })
-  return img
 }
 
 export function getLookupUrl (username: string, type: 'skin' | 'cape'): string {
@@ -20,8 +42,12 @@ export function getLookupUrl (username: string, type: 'skin' | 'cape'): string {
 }
 
 export async function loadSkinImage (skinUrl: string): Promise<{ canvas: HTMLCanvasElement, image: HTMLImageElement }> {
-  const image = await loadImageFromUrl(skinUrl)
-  const skinCanvas = document.createElement('canvas')
-  loadSkinToCanvas(skinCanvas, image)
-  return { canvas: skinCanvas, image }
+  try {
+    const image = await loadImageFromUrl(skinUrl)
+    const skinCanvas = document.createElement('canvas')
+    loadSkinToCanvas(skinCanvas, image)
+    return { canvas: skinCanvas, image }
+  } catch (error) {
+    throw error
+  }
 }
