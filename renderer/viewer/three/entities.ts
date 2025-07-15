@@ -336,7 +336,7 @@ export class Entities {
     const playerObject = this.getPlayerObject(entityId)
     if (!playerObject) return
 
-    // Check for custom agent skin first, regardless of skinUrl value
+    // Check for custom agent skin first
     if (username && window.agentSkinMap?.has(username)) {
       const customSkinUrl = window.agentSkinMap.get(username)
       skinUrl = customSkinUrl

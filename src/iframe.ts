@@ -95,7 +95,6 @@ export function setupIframeComms () {
   customEvents.on('kradle:setAgentSkins', (data) => {
     console.log('[iframe-rpc] Agent skin data received from parent', data)
     // Store agent skin data globally for use by entities
-    // Use both agentId and username as keys for maximum compatibility
     if (window.agentSkinMap) {
       window.agentSkinMap.clear()
     } else {
