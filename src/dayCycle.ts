@@ -10,7 +10,7 @@ export default () => {
     const night = 13_500
     const morningStart = 23_000
     const morningEnd = 23_961
-    const timeProgress = options.dayCycleAndLighting ? bot.time.timeOfDay : 0
+    const timeProgress = options.dayCycle ? bot.time.timeOfDay : 0
 
     // todo check actual colors
     const dayColorRainy = { r: 111 / 255, g: 156 / 255, b: 236 / 255 }
@@ -35,10 +35,10 @@ export default () => {
     // todo need to think wisely how to set these values & also move directional light around!
     const colorInt = Math.max(int, 0.1)
     updateBackground({ r: dayColor.r * colorInt, g: dayColor.g * colorInt, b: dayColor.b * colorInt })
-    if (!options.newVersionsLighting && bot.supportFeature('blockStateId')) {
-      appViewer.playerState.reactive.ambientLight = Math.max(int, 0.25)
-      appViewer.playerState.reactive.directionalLight = Math.min(int, 0.5)
-    }
+    // if (!options.newVersionsLighting && bot.supportFeature('blockStateId')) {
+    //   appViewer.playerState.reactive.ambientLight = Math.max(int, 0.25)
+    //   appViewer.playerState.reactive.directionalLight = Math.min(int, 0.45)
+    // }
   }
 
   bot.on('time', timeUpdated)

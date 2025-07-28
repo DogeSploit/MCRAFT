@@ -100,12 +100,40 @@ export const watchOptionsAfterViewerInit = () => {
     appViewer.inWorldRenderingConfig.smoothLighting = options.smoothLighting
   })
 
-  subscribeKey(options, 'newVersionsLighting', () => {
-    appViewer.inWorldRenderingConfig.enableLighting = !bot.supportFeature('blockStateId') || options.newVersionsLighting
-  })
+  const updateLightingStrategy = () => {
+    if (!bot) return
+    if (!options.experimentalLightingV1) {
+      appViewer.inWorldRenderingConfig.clientSideLighting = 'none'
+      appViewer.inWorldRenderingConfig.enableLighting = false
+      appViewer.inWorldRenderingConfig.legacyLighting = true
+      return
+    }
+
+    const lightingEnabled = options.dayCycle
+    if (!lightingEnabled) {
+      appViewer.inWorldRenderingConfig.clientSideLighting = 'none'
+      appViewer.inWorldRenderingConfig.enableLighting = false
+      return
+    }
+
+    appViewer.inWorldRenderingConfig.legacyLighting = false
+
+    // for now ignore saved lighting to allow proper updates and singleplayer created worlds
+    // appViewer.inWorldRenderingConfig.flyingSquidWorkarounds = miscUiState.flyingSquid
+    const serverParsingSupported = miscUiState.flyingSquid ? /* !bot.supportFeature('blockStateId') */false : bot.supportFeature('blockStateId')
+
+    const serverLightingPossible = serverParsingSupported && (options.lightingStrategy === 'prefer-server' || options.lightingStrategy === 'always-server')
+    const clientLightingPossible = options.lightingStrategy !== 'always-server'
+
+    const clientSideLighting = !serverLightingPossible
+    appViewer.inWorldRenderingConfig.clientSideLighting = serverLightingPossible && clientLightingPossible ? 'partial' : clientSideLighting ? 'full' : 'none'
+    appViewer.inWorldRenderingConfig.enableLighting = serverLightingPossible || clientLightingPossible
+  }
+
+  subscribeKey(options, 'lightingStrategy', updateLightingStrategy)
 
   customEvents.on('mineflayerBotCreated', () => {
-    appViewer.inWorldRenderingConfig.enableLighting = !bot.supportFeature('blockStateId') || options.newVersionsLighting
+    updateLightingStrategy()
   })
 
   watchValue(options, o => {

@@ -197,6 +197,7 @@ export class AppViewer {
     this.currentDisplay = 'world'
     const startPosition = bot.entity?.position ?? new Vec3(0, 64, 0)
     this.worldView = new WorldDataEmitter(world, renderDistance, startPosition)
+    this.worldView.worldRendererConfig = this.inWorldRenderingConfig
     window.worldView = this.worldView
     watchOptionsAfterWorldViewInit(this.worldView)
     this.appConfigUdpate()
@@ -260,6 +261,7 @@ export class AppViewer {
     if (cleanState) {
       this.currentState = undefined
       this.currentDisplay = null
+      this.worldView?.destroy()
       this.worldView = undefined
     }
     if (this.backend) {

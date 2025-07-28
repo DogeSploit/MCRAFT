@@ -36,7 +36,7 @@ export const defaultOptions = {
   /** @unstable */
   debugLogNotFrequentPackets: false,
   unimplementedContainers: false,
-  dayCycleAndLighting: true,
+  dayCycle: true,
   loadPlayerSkins: true,
   renderEars: true,
   lowMemoryMode: false,
@@ -92,8 +92,16 @@ export const defaultOptions = {
   showCursorBlockInSpectator: false,
   renderEntities: true,
   smoothLighting: true,
-  newVersionsLighting: false,
   chatSelect: true,
+  // experimentalLighting: IS_BETA_TESTER,
+  experimentalLightingV1: false,
+  /**
+   * Controls how lighting is calculated and rendered:
+   * - 'always-client': Always use client-side lighting engine for all light calculations
+   * - 'prefer-server': Use server lighting data when available, fallback to client-side calculations
+   * - 'always-server': Only use lighting data from the server, disable client-side calculations
+   */
+  lightingStrategy: 'prefer-server' as 'always-client' | 'prefer-server' | 'always-server',
   autoJump: 'auto' as 'auto' | 'always' | 'never',
   autoParkour: false,
   vrSupport: true, // doesn't directly affect the VR mode, should only disable the button which is annoying to android users

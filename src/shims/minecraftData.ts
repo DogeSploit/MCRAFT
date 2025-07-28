@@ -1,8 +1,12 @@
 import { versionToNumber } from 'renderer/viewer/common/utils'
 import { restoreMinecraftData } from '../optimizeJson'
 // import minecraftInitialDataJson from '../../generated/minecraft-initial-data.json'
-import { toMajorVersion } from '../utils'
 import { importLargeData } from '../../generated/large-data-aliases'
+
+const toMajorVersion = version => {
+  const [a, b] = (String(version)).split('.')
+  return `${a}.${b}`
+}
 
 const customResolver = () => {
   const resolver = Promise.withResolvers()
@@ -19,6 +23,8 @@ const customResolver = () => {
   }
 }
 
+//@ts-expect-error for workers using minecraft-data
+globalThis.window ??= globalThis
 let dataStatus = 'not-called'
 
 const optimizedDataResolver = customResolver()
@@ -75,7 +81,7 @@ const possiblyGetFromCache = (version: string) => {
   cacheTime.set(version, Date.now())
   return data
 }
-window.allLoadedMcData = new Proxy({}, {
+window.allLoadedMcData ??= new Proxy({}, {
   get (t, version: string) {
     // special properties like $typeof
     if (version.includes('$')) return

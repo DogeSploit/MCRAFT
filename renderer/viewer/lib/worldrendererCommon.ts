@@ -15,6 +15,7 @@ import { buildCleanupDecorator } from './cleanupDecorator'
 import { HighestBlockInfo, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig, MesherMainEvent } from './mesher/shared'
 import { chunkPos } from './simpleUtils'
 import { addNewStat, removeAllStats, updatePanesVisibility, updateStatText } from './ui/newStats'
+import { dumpLightData } from './lightEngine'
 import { WorldDataEmitterWorker } from './worldDataEmitter'
 import { getPlayerStateUtils, PlayerStateReactive, PlayerStateRenderer, PlayerStateUtils } from './basePlayerState'
 import { MesherLogReader } from './mesherlogReader'
@@ -44,6 +45,9 @@ export const defaultWorldRendererConfig = {
   clipWorldBelowY: undefined as number | undefined,
   smoothLighting: true,
   enableLighting: true,
+  legacyLighting: false,
+  clientSideLighting: 'full' as 'full' | 'partial' | 'none',
+  flyingSquidWorkarounds: false,
   starfield: true,
   addChunksBatchWaitTime: 200,
   vrSupport: true,
@@ -62,6 +66,7 @@ export const defaultWorldRendererConfig = {
 export type WorldRendererConfig = typeof defaultWorldRendererConfig
 
 export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any> {
+  skyLight = 15
   worldReadyResolvers = Promise.withResolvers<void>()
   worldReadyPromise = this.worldReadyResolvers.promise
   timeOfTheDay = 0
@@ -496,6 +501,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
 
   timeUpdated? (newTime: number): void
 
+  skylightUpdated? (): void
+
   updateViewerPosition (pos: Vec3) {
     this.viewerChunkPosition = pos
     for (const [key, value] of Object.entries(this.loadedChunks)) {
@@ -543,7 +550,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.sendMesherMcData()
   }
 
-  getMesherConfig (): MesherConfig {
+  changeSkyLight () {
     let skyLight = 15
     const timeOfDay = this.timeOfTheDay
     if (timeOfDay < 0 || timeOfDay > 24_000) {
@@ -556,34 +563,35 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       skyLight = ((timeOfDay - 12_000) / 6000) * 15
     }
 
-    skyLight = Math.floor(skyLight)
+    this.skyLight = Math.floor(skyLight)
+  }
+
+  getMesherConfig (): MesherConfig {
     return {
       version: this.version,
-      enableLighting: this.worldRendererConfig.enableLighting,
-      skyLight,
+      enableLighting: this.worldRendererConfig.enableLighting && !this.playerStateReactive.lightingDisabled,
+      skyLight: this.skyLight,
       smoothLighting: this.worldRendererConfig.smoothLighting,
       outputFormat: this.outputFormat,
       // textureSize: this.resourcesManager.currentResources!.blocksAtlasParser.atlas.latest.width,
       debugModelVariant: undefined,
       clipWorldBelowY: this.worldRendererConfig.clipWorldBelowY,
       disableSignsMapsSupport: !this.worldRendererConfig.extraBlockRenderers,
+      usingCustomLightHolder: false,
+      flyingSquidWorkarounds: this.worldRendererConfig.flyingSquidWorkarounds,
       worldMinY: this.worldMinYRender,
       worldMaxY: this.worldMinYRender + this.worldSizeParams.worldHeight,
     }
   }
 
   sendMesherMcData () {
-    const allMcData = mcDataRaw.pc[this.version] ?? mcDataRaw.pc[toMajorVersion(this.version)]
-    const mcData = {
-      version: JSON.parse(JSON.stringify(allMcData.version))
-    }
-    for (const key of dynamicMcDataFiles) {
-      mcData[key] = allMcData[key]
-    }
-
-    for (const worker of this.workers) {
-      worker.postMessage({ type: 'mcData', mcData, config: this.getMesherConfig() })
-    }
+    meshersSendMcData(
+      this.workers,
+      this.version,
+      {
+        config: this.getMesherConfig()
+      }
+    )
     this.logWorkerWork('# mcData sent')
   }
 
@@ -641,7 +649,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         x,
         z,
         chunk,
-        customBlockModels: customBlockModels || undefined
+        customBlockModels: customBlockModels || undefined,
+        lightData: dumpLightData(x, z)
       })
     }
     this.workers[0].postMessage({
@@ -817,19 +826,17 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     })
 
     worldEmitter.on('time', (timeOfDay) => {
-      this.timeUpdated?.(timeOfDay)
-
       if (timeOfDay < 0 || timeOfDay > 24_000) {
         throw new Error('Invalid time of day. It should be between 0 and 24000.')
       }
 
+      const oldSkyLight = this.skyLight
       this.timeOfTheDay = timeOfDay
-
-      // if (this.worldRendererConfig.skyLight === skyLight) return
-      // this.worldRendererConfig.skyLight = skyLight
-      // if (this instanceof WorldRendererThree) {
-      //   (this).rerenderAllChunks?.()
-      // }
+      this.changeSkyLight()
+      if (oldSkyLight !== this.skyLight) {
+        this.skylightUpdated?.()
+      }
+      this.timeUpdated?.(timeOfDay)
     })
   }
 
@@ -922,7 +929,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.reactiveState.world.mesherWork = true
     const distance = this.getDistance(pos)
     // todo shouldnt we check loadedChunks instead?
-    if (!this.workers.length || distance[0] > this.viewDistance || distance[1] > this.viewDistance) return
+    // if (!this.workers.length || distance[0] > this.viewDistance || distance[1] > this.viewDistance) return
     const key = `${Math.floor(pos.x / 16) * 16},${Math.floor(pos.y / 16) * 16},${Math.floor(pos.z / 16) * 16}`
     // if (this.sectionsOutstanding.has(key)) return
     this.renderUpdateEmitter.emit('dirty', pos, value)
@@ -1026,12 +1033,16 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.renderUpdateEmitter.removeAllListeners()
     this.abortController.abort()
     removeAllStats()
+
+    this.displayOptions.worldView.destroy()
   }
 }
 
 export const initMesherWorker = (onGotMessage: (data: any) => void) => {
   // Node environment needs an absolute path, but browser needs the url of the file
   const workerName = 'mesher.js'
+  // eslint-disable-next-line node/no-path-concat
+  const src = typeof window === 'undefined' ? `${__dirname}/${workerName}` : workerName
 
   let worker: any
   if (process.env.SINGLE_FILE_BUILD) {
@@ -1039,7 +1050,7 @@ export const initMesherWorker = (onGotMessage: (data: any) => void) => {
     const blob = new Blob([workerCode], { type: 'text/javascript' })
     worker = new Worker(window.URL.createObjectURL(blob))
   } else {
-    worker = new Worker(workerName)
+    worker = new Worker(src)
   }
 
   worker.onmessage = ({ data }) => {

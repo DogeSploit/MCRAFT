@@ -32,8 +32,7 @@ export default () => {
   const [packetsString, setPacketsString] = useState('')
   const { showDebugHud } = useSnapshot(miscUiState)
   const [pos, setPos] = useState<{ x: number, y: number, z: number }>({ x: 0, y: 0, z: 0 })
-  const [skyL, setSkyL] = useState(0)
-  const [blockL, setBlockL] = useState(0)
+  const [lightInfo, setLightInfo] = useState<{ sky: number, block: number, info: string }>({ sky: 0, block: 0, info: '-' })
   const [biomeId, setBiomeId] = useState(0)
   const [day, setDay] = useState(0)
   const [timeOfDay, setTimeOfDay] = useState(0)
@@ -122,9 +121,28 @@ export default () => {
     })
 
     const freqUpdateInterval = setInterval(() => {
+      const lightingEnabled = appViewer.inWorldRenderingConfig.enableLighting
+      const { clientSideLighting } = appViewer.inWorldRenderingConfig
+      let info = ''
+      if (lightingEnabled) {
+        if (clientSideLighting === 'none') {
+          info = 'Server Lighting'
+        } else if (clientSideLighting === 'full') {
+          info = 'Client Engine'
+        } else {
+          info = 'Server + Client Engine'
+        }
+      } else {
+        info = 'Lighting Disabled'
+      }
+      setLightInfo({
+        sky: bot.world.getSkyLight(bot.entity.position),
+        block: bot.world.getBlockLight(bot.entity.position),
+        info
+      })
+
+
       setPos({ ...bot.entity.position })
-      setSkyL(bot.world.getSkyLight(bot.entity.position))
-      setBlockL(bot.world.getBlockLight(bot.entity.position))
       setBiomeId(bot.world.getBiome(bot.entity.position))
       setDimension(bot.game.dimension)
       setDay(bot.time.day)
@@ -182,7 +200,7 @@ export default () => {
       <p>Client TPS: {clientTps} {serverTps ? `Server TPS: ${serverTps.value} ${serverTps.frozen ? '(frozen)' : ''}` : ''}</p>
       <p>Facing (viewer): {bot.entity.yaw.toFixed(3)} {bot.entity.pitch.toFixed(3)}</p>
       <p>Facing (minecraft): {quadsDescription[minecraftQuad.current]} ({minecraftYaw.current.toFixed(1)} {(bot.entity.pitch * -180 / Math.PI).toFixed(1)})</p>
-      <p>Light: {blockL} ({skyL} sky)</p>
+      <p>Light: {lightInfo.block} ({lightInfo.sky} sky) ({lightInfo.info})</p>
 
       <p>Biome: minecraft:{loadedData.biomesArray[biomeId]?.name ?? 'unknown biome'}</p>
       <p>Day: {day} Time: {timeOfDay}</p>

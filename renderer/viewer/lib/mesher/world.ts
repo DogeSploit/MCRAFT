@@ -1,3 +1,4 @@
+import { WorldLightHolder } from 'minecraft-lighting/dist/worldLightHolder'
 import Chunks from 'prismarine-chunk'
 import mcData from 'minecraft-data'
 import { Block } from 'prismarine-block'
@@ -32,6 +33,8 @@ export type WorldBlock = Omit<Block, 'position'> & {
 }
 
 export class World {
+  hadSkyLight = false
+  lightHolder = new WorldLightHolder(0, 0)
   config = defaultMesherConfig
   Chunk: typeof import('prismarine-chunk/types/index').PCChunk
   columns = {} as { [key: string]: import('prismarine-chunk/types/index').PCChunk }
@@ -53,36 +56,69 @@ export class World {
   getLight (pos: Vec3, isNeighbor = false, skipMoreChecks = false, curBlockName = '') {
     // for easier testing
     if (!(pos instanceof Vec3)) pos = new Vec3(...pos as [number, number, number])
-    const { enableLighting, skyLight } = this.config
+
+    const IS_USING_LOCAL_SERVER_LIGHTING = this.config.flyingSquidWorkarounds
+    // const IS_USING_SERVER_LIGHTING = false
+
+    const { enableLighting, skyLight, usingCustomLightHolder } = this.config
     if (!enableLighting) return 15
-    // const key = `${pos.x},${pos.y},${pos.z}`
-    // if (lightsCache.has(key)) return lightsCache.get(key)
     const column = this.getColumnByPos(pos)
-    if (!column || !hasChunkSection(column, pos)) return 15
-    let result = Math.min(
-      15,
-      Math.max(
-        column.getBlockLight(posInChunk(pos)),
-        Math.min(skyLight, column.getSkyLight(posInChunk(pos)))
-      ) + 2
+    if (!column) return 15
+    if (!usingCustomLightHolder && !hasChunkSection(column, pos)) return 2
+    let result = Math.max(
+      2,
+      Math.min(
+        15,
+        Math.max(
+          this.getBlockLight(pos),
+          Math.min(skyLight, this.getSkyLight(pos))
+        )
+      )
     )
-    // lightsCache.set(key, result)
-    if (result === 2 && [this.getBlock(pos)?.name ?? '', curBlockName].some(x => /_stairs|slab|glass_pane/.exec(x)) && !skipMoreChecks) { // todo this is obviously wrong
-      const lights = [
-        this.getLight(pos.offset(0, 1, 0), undefined, true),
-        this.getLight(pos.offset(0, -1, 0), undefined, true),
-        this.getLight(pos.offset(0, 0, 1), undefined, true),
-        this.getLight(pos.offset(0, 0, -1), undefined, true),
-        this.getLight(pos.offset(1, 0, 0), undefined, true),
-        this.getLight(pos.offset(-1, 0, 0), undefined, true)
-      ].filter(x => x !== 2)
-      if (lights.length) {
-        const min = Math.min(...lights)
-        result = min
+    if (result === 2 && IS_USING_LOCAL_SERVER_LIGHTING) {
+      if ([this.getBlock(pos)?.name ?? '', curBlockName].some(x => /_stairs|slab|glass_pane/.exec(x)) && !skipMoreChecks) { // todo this is obviously wrong
+        const lights = [
+          this.getLight(pos.offset(0, 1, 0), undefined, true),
+          this.getLight(pos.offset(0, -1, 0), undefined, true),
+          this.getLight(pos.offset(0, 0, 1), undefined, true),
+          this.getLight(pos.offset(0, 0, -1), undefined, true),
+          this.getLight(pos.offset(1, 0, 0), undefined, true),
+          this.getLight(pos.offset(-1, 0, 0), undefined, true)
+        ].filter(x => x !== 2)
+        if (lights.length) {
+          const min = Math.min(...lights)
+          result = min
+        }
       }
+      if (isNeighbor) result = 15 // TODO
     }
-    if (isNeighbor && result === 2) result = 15 // TODO
     return result
+  }
+
+  getBlockLight (pos: Vec3) {
+    // if (this.config.clientSideLighting) {
+    //   return this.lightHolder.getBlockLight(pos.x, pos.y, pos.z)
+    // }
+
+    const column = this.getColumnByPos(pos)
+    if (!column) return 15
+    return column.getBlockLight(posInChunk(pos))
+  }
+
+  getSkyLight (pos: Vec3) {
+    const result = this.getSkyLightInner(pos)
+    if (result > 2) this.hadSkyLight = true
+    return result
+  }
+
+  getSkyLightInner (pos: Vec3) {
+    // if (this.config.clientSideLighting) {
+    //   return this.lightHolder.getSkyLight(pos.x, pos.y, pos.z)
+    // }
+
+    const column = this.getColumnByPos(pos)
+    if (!column) return 15
+    return column.getSkyLight(posInChunk(pos))
   }
 
   addColumn (x, z, json) {

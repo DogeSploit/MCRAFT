@@ -82,19 +82,23 @@ export const guiOptionsScheme: {
       custom () {
         return <Category>Experimental</Category>
       },
-      dayCycleAndLighting: {
-        text: 'Day Cycle',
+      experimentalLightingV1: {
+        text: 'Experimental Lighting',
+        tooltip: 'Once stable this setting will be removed and always enabled',
       },
       smoothLighting: {},
-      newVersionsLighting: {
-        text: 'Lighting in Newer Versions',
+      lightingStrategy: {
+        values: [
+          ['prefer-server', 'Prefer Server'],
+          ['always-client', 'Always Client'],
+          ['always-server', 'Always Server'],
+        ],
       },
       lowMemoryMode: {
         text: 'Low Memory Mode',
         enableWarning: 'Enabling it will make chunks load ~4x slower. When in the game, app needs to be reloaded to apply this setting.',
       },
       starfieldRendering: {},
-      renderEntities: {},
       keepChunksDistance: {
         max: 5,
         unit: '',

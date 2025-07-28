@@ -8,6 +8,9 @@ export const defaultMesherConfig = {
   enableLighting: true,
   skyLight: 15,
   smoothLighting: true,
+  usingCustomLightHolder: false,
+  flyingSquidWorkarounds: false,
+
   outputFormat: 'threeJs' as 'threeJs' | 'webgpu',
   // textureSize: 1024, // for testing
   debugModelVariant: undefined as undefined | number[],
@@ -45,6 +48,7 @@ export type MesherGeometryOutput = {
   hadErrors: boolean
   blocksCount: number
   customBlockModels?: CustomBlockModels
+  hasSkylight?: boolean
 }
 
 export interface MesherMainEvents {

@@ -9,6 +9,8 @@ import { proxy } from 'valtio'
 import TypedEmitter from 'typed-emitter'
 import { delayedIterator } from '../../playground/shared'
 import { chunkPos } from './simpleUtils'
+import { createLightEngineIfNeededNew, destroyLightEngine, lightRemoveColumn, processLightChunk, updateBlockLight } from './lightEngine'
+import { WorldRendererConfig } from './worldrendererCommon'
 
 export type ChunkPosKey = string // like '16,16'
 type ChunkPos = { x: number, z: number } // like { x: 16, z: 16 }
@@ -32,9 +34,19 @@ export type WorldDataEmitterEvents = {
 
 export class WorldDataEmitterWorker extends (EventEmitter as new () => TypedEmitter<WorldDataEmitterEvents>) {
   static readonly restorerName = 'WorldDataEmitterWorker'
+
+  destroy () {
+    this.removeAllListeners()
+  }
 }
 
 export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<WorldDataEmitterEvents>) {
+  minY = -64
+  worldHeight = 384
+  dimensionName = ''
+  version = ''
+
+  worldRendererConfig: WorldRendererConfig
   loadedChunks: Record<ChunkPosKey, boolean>
   readonly lastPos: Vec3
   private eventListeners: Record<string, any> = {}
@@ -64,18 +76,22 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
     this.emitter = this
   }
 
-  setBlockStateId (position: Vec3, stateId: number) {
-    const val = this.world.setBlockStateId(position, stateId) as Promise<void> | void
-    if (val) throw new Error('setBlockStateId returned promise (not supported)')
-    // const chunkX = Math.floor(position.x / 16)
-    // const chunkZ = Math.floor(position.z / 16)
-    // if (!this.loadedChunks[`${chunkX},${chunkZ}`] && !this.waitingSpiralChunksLoad[`${chunkX},${chunkZ}`]) {
-    //   void this.loadChunk({ x: chunkX, z: chunkZ })
-    //   return
-    // }
+  // setBlockStateId (position: Vec3, stateId: number) {
+  //   const val = this.world.setBlockStateId(position, stateId) as Promise<void> | void
+  //   if (val) throw new Error('setBlockStateId returned promise (not supported)')
+  //   // const chunkX = Math.floor(position.x / 16)
+  //   // const chunkZ = Math.floor(position.z / 16)
+  //   // if (!this.loadedChunks[`${chunkX},${chunkZ}`] && !this.waitingSpiralChunksLoad[`${chunkX},${chunkZ}`]) {
+  //   //   void this.loadChunk({ x: chunkX, z: chunkZ })
+  //   //   return
+  //   // }
 
-    this.emit('blockUpdate', { pos: position, stateId })
-  }
+  //   const updateChunks = this.worldRendererConfig.clientSideLighting ? updateBlockLight(position.x, position.y, position.z, stateId) ?? [] : []
+  //   this.emit('blockUpdate', { pos: position, stateId })
+  //   for (const chunk of updateChunks) {
+  //     void this.loadChunk(new Vec3(chunk[0] * 16, 0, chunk[1] * 16), true, 'setBlockStateId light update')
+  //   }
+  // }
 
   updateViewDistance (viewDistance: number) {
     this.viewDistance = viewDistance
@@ -83,6 +99,7 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
   }
 
   listenToBot (bot: typeof __type_bot) {
+    this.version = bot.version
     const entitiesObjectData = new Map<string, number>()
     bot._client.prependListener('spawn_entity', (data) => {
       if (data.objectData && data.entityId !== undefined) {
@@ -143,9 +160,16 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
       chunkColumnUnload: (pos: Vec3) => {
         this.unloadChunk(pos)
       },
-      blockUpdate: (oldBlock: any, newBlock: any) => {
+      blockUpdate: async (oldBlock, newBlock) => {
+        if (typeof newBlock.stateId === 'number' && oldBlock?.stateId === newBlock.stateId) return
         const stateId = newBlock.stateId ?? ((newBlock.type << 4) | newBlock.metadata)
-        this.emitter.emit('blockUpdate', { pos: oldBlock.position, stateId })
+        const distance = newBlock.position.distanceTo(this.lastPos)
+
+        this.emit('blockUpdate', { pos: newBlock.position, stateId })
+        const updateChunks = this.worldRendererConfig.clientSideLighting === 'none' ? [] : await updateBlockLight(newBlock.position.x, newBlock.position.y, newBlock.position.z, stateId, distance) ?? []
+        for (const chunk of updateChunks) {
+          void this.loadChunk(new Vec3(chunk.chunkX * 16, 0, chunk.chunkZ * 16), true, 'setBlockStateId light update')
+        }
       },
       time: () => {
         this.emitter.emit('time', bot.time.timeOfDay)
@@ -154,17 +178,22 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
         this.emitter.emit('end')
       },
       // when dimension might change
-      login: () => {
-        void this.updatePosition(bot.entity.position, true)
-        this.emitter.emit('playerEntity', bot.entity)
+      login () {
+        possiblyDimensionChange()
       },
       respawn: () => {
-        void this.updatePosition(bot.entity.position, true)
-        this.emitter.emit('playerEntity', bot.entity)
+        possiblyDimensionChange()
         this.emitter.emit('onWorldSwitch')
       },
     } satisfies Partial<BotEvents>
 
+    const possiblyDimensionChange = () => {
+      this.minY = bot.game['minY'] ?? -64
+      this.worldHeight = bot.game['height'] ?? 384
+      this.dimensionName = bot.game['dimension'] ?? ''
+      void this.updatePosition(bot.entity.position, true)
+      this.emitter.emit('playerEntity', bot.entity)
+    }
 
     bot._client.on('update_light', ({ chunkX, chunkZ }) => {
       const chunkPos = new Vec3(chunkX * 16, 0, chunkZ * 16)
@@ -202,6 +231,14 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
     for (const [evt, listener] of Object.entries(this.eventListeners)) {
       bot.removeListener(evt as any, listener)
     }
+  }
+
+  destroy () {
+    if (bot) {
+      this.removeListenersFromBot(bot as any)
+    }
+    this.emitter.removeAllListeners()
+    destroyLightEngine()
   }
 
   async init (pos: Vec3) {
@@ -268,14 +305,33 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
   // lastTime = 0
 
   async loadChunk (pos: ChunkPos, isLightUpdate = false, reason = 'spiral') {
-    const [botX, botZ] = chunkPos(this.lastPos)
+    createLightEngineIfNeededNew(this, this.version)
 
-    const dx = Math.abs(botX - Math.floor(pos.x / 16))
-    const dz = Math.abs(botZ - Math.floor(pos.z / 16))
+    const [botX, botZ] = chunkPos(this.lastPos)
+    const chunkX = Math.floor(pos.x / 16)
+    const chunkZ = Math.floor(pos.z / 16)
+
+    const dx = Math.abs(botX - chunkX)
+    const dz = Math.abs(botZ - chunkZ)
     if (dx <= this.viewDistance && dz <= this.viewDistance) {
       // eslint-disable-next-line @typescript-eslint/await-thenable -- todo allow to use async world provider but not sure if needed
       const column = await this.world.getColumnAt(pos['y'] ? pos as Vec3 : new Vec3(pos.x, 0, pos.z))
       if (column) {
+        let result = [] as Array<{ chunkX: number, chunkZ: number }>
+        if (!isLightUpdate) {
+          const computeLighting = this.worldRendererConfig.clientSideLighting === 'full'
+          const promise = processLightChunk(pos.x, pos.z, computeLighting)
+          if (computeLighting) {
+            result = (await promise) ?? []
+          }
+        }
+        if (!result) return
+        for (const affectedChunk of result) {
+          if (affectedChunk.chunkX === chunkX && affectedChunk.chunkZ === chunkZ) continue
+          const loadedChunk = this.loadedChunks[`${affectedChunk.chunkX * 16},${affectedChunk.chunkZ * 16}`]
+          if (!loadedChunk) continue
+          void this.loadChunk(new Vec3(affectedChunk.chunkX * 16, 0, affectedChunk.chunkZ * 16), true)
+        }
         // const latency = Math.floor(performance.now() - this.lastTime)
         // this.debugGotChunkLatency.push(latency)
         // this.lastTime = performance.now()
@@ -317,6 +373,7 @@ export class WorldDataEmitter extends (EventEmitter as new () => TypedEmitter<Wo
     this.emitter.emit('unloadChunk', { x: pos.x, z: pos.z })
     delete this.loadedChunks[`${pos.x},${pos.z}`]
     delete this.debugChunksInfo[`${pos.x},${pos.z}`]
+    lightRemoveColumn(pos.x, pos.z)
   }
 
   async updatePosition (pos: Vec3, force = false) {

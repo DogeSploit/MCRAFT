@@ -72,7 +72,10 @@ const softCleanup = () => {
   globalThis.world = world
 }
 
+let sideControl = false
 const handleMessage = data => {
+  if (sideControl) return
+
   const globalVar: any = globalThis
 
   if (data.type === 'mcData') {
@@ -94,6 +97,13 @@ const handleMessage = data => {
   }
 
   switch (data.type) {
+    case 'sideControl': {
+      if (data.value === 'lightEngine') {
+        sideControl = true
+        import('minecraft-lighting/dist/prismarineWorker.worker.js')
+      }
+      break
+    }
     case 'mesherData': {
       setMesherData(data.blockstatesModels, data.blocksAtlas, data.config.outputFormat === 'webgpu')
       allDataReady = true
@@ -109,6 +119,9 @@ const handleMessage = data => {
     }
     case 'chunk': {
       world.addColumn(data.x, data.z, data.chunk)
+      if (data.lightData) {
+        world.lightHolder.loadChunk(data.lightData)
+      }
       if (data.customBlockModels) {
         const chunkKey = `${data.x},${data.z}`
         world.customBlockModels.set(chunkKey, data.customBlockModels)

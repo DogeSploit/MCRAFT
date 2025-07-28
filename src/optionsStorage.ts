@@ -7,6 +7,8 @@ import { appStorage } from './react/appStorageProvider'
 import { miscUiState } from './globalState'
 import { defaultOptions } from './defaultOptions'
 
+defaultOptions.experimentalLightingV1 = location.hostname.startsWith('lighting.') // todo
+
 const isDev = process.env.NODE_ENV === 'development'
 const initialAppConfig = process.env?.INLINED_APP_CONFIG as AppConfig ?? {}
 
@@ -23,6 +25,11 @@ export const disabledSettings = proxy({
 })
 
 const migrateOptions = (options: Partial<AppOptions & Record<string, any>>) => {
+  if (options.dayCycleAndLighting) {
+    delete options.dayCycleAndLighting
+    options.dayCycle = options.dayCycleAndLighting
+  }
+
   if (options.highPerformanceGpu) {
     options.gpuPreference = 'high-performance'
     delete options.highPerformanceGpu
