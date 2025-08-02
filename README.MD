@@ -4,11 +4,13 @@
 
 Minecraft **clone** rewritten in TypeScript using the best modern web technologies. Minecraft vanilla-compatible client and integrated server packaged into a single web app.
 
+Unlike most other PrismarineJS clients, this client allows you to use single player and multi-player inside single player worlds (similar to [Essential Mod](https://essential.gg)
+
 You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg) (short link), [mcon.vercel.app](https://mcon.vercel.app/) or the GitHub pages deploy. Every commit from the default (`develop`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - so it's usually newer, but might be less stable.
 
 > For Turkey/Russia use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
 
-Don't confuse with [Eaglercraft](https://git.eaglercraft.rip/eaglercraft/eaglercraft-1.8) which is a REAL vanilla Minecraft Java edition port to the web (but with its own limitations). Eaglercraft is a fully playable solution, meanwhile this project is aimed for *device-compatiiblity* and better performance so it feels portable, flexible and lightweight. It's also a very strong example on how to build true HTML games for the web at scale entirely with the JS ecosystem. Have fun!
+Don't confuse with [Eaglercraft](https://eaglercraft.com/mc/1.12.2-wasm) which is a REAL vanilla Minecraft Java edition port to the web (but with its own limitations). Eaglercraft is a fully playable solution, meanwhile this project is aimed for *device-compatiiblity* and better performance so it feels portable, flexible and lightweight. It's also a very strong example on how to build true HTML games for the web at scale entirely with the JS ecosystem. Have fun!
 
 For building the project yourself / contributing, see [Development, Debugging & Contributing](#development-debugging--contributing). For reference at what and how web technologies / frameworks are used, see [TECH.md](./TECH.md) (also for comparison with Eaglercraft).
 
@@ -54,7 +56,7 @@ Howerver, it's known that these browsers have issues:
 
 ### Versions Support
 
-Server versions 1.8 - 1.21.4 are supported.
+Server versions 1.8 - 1.21.7 are supported.
 First class versions (most of the features are tested on these versions):
 
 - 1.19.4
