@@ -1,4 +1,4 @@
-# Minecraft Web Client
+0# Minecraft Web Client
 
 ![banner](./docs-assets/banner.jpg)
 
@@ -6,7 +6,7 @@ Minecraft **clone** rewritten in TypeScript using the best modern web technologi
 
 Unlike most other PrismarineJS clients, this client allows you to use single player and multi-player inside single player worlds (similar to [Essential Mod](https://essential.gg)
 
-You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg) (short link), [mcon.vercel.app](https://mcon.vercel.app/) or the GitHub pages deploy. Every commit from the default (`develop`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - so it's usually newer, but might be less stable.
+You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg) (short link), [mcon.vercel.app](https://mcon.vercel.app/) or [the GitHub pages deploy](https://zarody.github.io/minecraft-web-client). Every commit from the default (`develop`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - so it's usually newer, but might be less stable.
 
 > For Turkey/Russia use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
 
