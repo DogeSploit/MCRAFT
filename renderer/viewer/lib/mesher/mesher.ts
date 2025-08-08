@@ -1,7 +1,7 @@
 import { Vec3 } from 'vec3'
 import { World } from './world'
 import { getSectionGeometry, setBlockStatesData as setMesherData } from './models'
-import { BlockStateModelInfo } from './shared'
+import { BlockStateModelInfo, InstancingMode } from './shared'
 import { INVISIBLE_BLOCKS } from './worldConstants'
 
 globalThis.structuredClone ??= (value) => JSON.parse(JSON.stringify(value))
@@ -17,7 +17,7 @@ if (module.require) {
 
 let workerIndex = 0
 let world: World
-let dirtySections = new Map<string, number>()
+let dirtySections = new Map<string, { key: string, instancingMode: InstancingMode, times: number }>()
 let allDataReady = false
 
 function sectionKey (x, y, z) {
@@ -47,7 +47,7 @@ function drainQueue (from, to) {
   queuedMessages = queuedMessages.slice(to)
 }
 
-function setSectionDirty (pos, value = true) {
+function setSectionDirty (pos, value = true, instancingMode = InstancingMode.None) {
   const x = Math.floor(pos.x / 16) * 16
   const y = Math.floor(pos.y / 16) * 16
   const z = Math.floor(pos.z / 16) * 16
@@ -60,7 +60,7 @@ function setSectionDirty (pos, value = true) {
 
   const chunk = world.getColumn(x, z)
   if (chunk?.getSection(pos)) {
-    dirtySections.set(key, (dirtySections.get(key) || 0) + 1)
+    dirtySections.set(key, { key, instancingMode, times: (dirtySections.get(key)?.times || 0) + 1 })
   } else {
     postMessage({ type: 'sectionFinished', key, workerIndex })
   }
@@ -68,8 +68,7 @@ function setSectionDirty (pos, value = true) {
 
 const softCleanup = () => {
   // clean block cache and loaded chunks
-  world = new World(world.config.version)
-  globalThis.world = world
+  world.blockCache = {}
 }
 
 const handleMessage = data => {
@@ -98,12 +97,14 @@ const handleMessage = data => {
       setMesherData(data.blockstatesModels, data.blocksAtlas, data.config.outputFormat === 'webgpu')
       allDataReady = true
       workerIndex = data.workerIndex
+      world.instancedBlocks = data.instancedBlocks
+      world.instancedBlockIds = data.instancedBlockIds || {}
 
       break
     }
     case 'dirty': {
       const loc = new Vec3(data.x, data.y, data.z)
-      setSectionDirty(loc, data.value)
+      setSectionDirty(loc, data.value, data.instancingMode || InstancingMode.None)
 
       break
     }
@@ -190,6 +191,18 @@ self.onmessage = ({ data }) => {
   handleMessage(data)
 }
 
+// Debug flag to spam last geometry output
+globalThis.DEBUG_GEOMETRY_SPAM = false // set to true to enable geometry spam for performance testing
+globalThis.lastGeometryKey = null
+
+// Track last 50 unique geometry objects with their respective keys for aggressive debugging
+interface GeometryEntry {
+  key: string
+  geometry: any
+}
+const lastGeometryEntries: GeometryEntry[] = []
+const MAX_GEOMETRY_ENTRIES = 50
+
 setInterval(() => {
   if (world === null || !allDataReady) return
 
@@ -197,23 +210,37 @@ setInterval(() => {
   // console.log(sections.length + ' dirty sections')
 
   // const start = performance.now()
-  for (const key of dirtySections.keys()) {
+  for (const [key, { instancingMode }] of dirtySections.entries()) {
     const [x, y, z] = key.split(',').map(v => parseInt(v, 10))
     const chunk = world.getColumn(x, z)
     let processTime = 0
     if (chunk?.getSection(new Vec3(x, y, z))) {
       const start = performance.now()
-      const geometry = getSectionGeometry(x, y, z, world)
-      const transferable = [geometry.positions?.buffer, geometry.normals?.buffer, geometry.colors?.buffer, geometry.uvs?.buffer].filter(Boolean)
-      //@ts-expect-error
-      postMessage({ type: 'geometry', key, geometry, workerIndex }, transferable)
+      const geometry = getSectionGeometry(x, y, z, world, instancingMode)
+      const transferable = [geometry.positions?.buffer, geometry.normals?.buffer, geometry.colors?.buffer, geometry.uvs?.buffer].filter(Boolean) as any
+      postMessage({ type: 'geometry', key, geometry, workerIndex }/* , transferable */)
       processTime = performance.now() - start
+      // Store last geometry for debug spam
+      globalThis.lastGeometryKey = key
+
+      // Track unique geometry entries for aggressive debugging
+      const existingIndex = lastGeometryEntries.findIndex(entry => entry.key === key)
+      if (existingIndex >= 0) {
+        // Update existing entry with new geometry
+        lastGeometryEntries[existingIndex].geometry = geometry
+      } else {
+        // Add new entry
+        lastGeometryEntries.push({ key, geometry })
+        if (lastGeometryEntries.length > MAX_GEOMETRY_ENTRIES) {
+          lastGeometryEntries.shift() // Remove oldest
+        }
+      }
     } else {
       // console.info('[mesher] Missing section', x, y, z)
     }
     const dirtyTimes = dirtySections.get(key)
     if (!dirtyTimes) throw new Error('dirtySections.get(key) is falsy')
-    for (let i = 0; i < dirtyTimes; i++) {
+    for (let i = 0; i < dirtyTimes.times; i++) {
       postMessage({ type: 'sectionFinished', key, workerIndex, processTime })
       processTime = 0
     }
@@ -237,3 +264,24 @@ setInterval(() => {
   // const time = performance.now() - start
   // console.log(`Processed ${sections.length} sections in ${time} ms (${time / sections.length} ms/section)`)
 }, 50)
+
+// Debug spam: repeatedly send last geometry output every 100ms
+setInterval(() => {
+  if (globalThis.DEBUG_GEOMETRY_SPAM) {
+    // Send the last geometry
+
+    // Aggressive debugging: send all tracked geometry entries with their respective geometries
+    // console.log(`[DEBUG] Sending ${lastGeometryEntries.length} unique geometry entries:`, lastGeometryEntries.map(e => e.key))
+
+    // Send each unique geometry entry with its respective geometry for maximum stress testing
+    for (const entry of lastGeometryEntries) {
+      postMessage({
+        type: 'geometry',
+        key: entry.key,
+        geometry: entry.geometry,
+        workerIndex,
+        debug: true // Mark as debug message
+      })
+    }
+  }
+}, 20)

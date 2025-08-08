@@ -5,8 +5,8 @@ import { BlockType } from '../../../playground/shared'
 import { World, BlockModelPartsResolved, WorldBlock as Block, WorldBlock } from './world'
 import { BlockElement, buildRotationMatrix, elemFaces, matmul3, matmulmat3, vecadd3, vecsub3 } from './modelsGeometryCommon'
 import { INVISIBLE_BLOCKS } from './worldConstants'
-import { MesherGeometryOutput, HighestBlockInfo } from './shared'
-
+import { MesherGeometryOutput, InstancingMode } from './shared'
+import { isBlockInstanceable } from './instancingUtils'
 
 let blockProvider: WorldBlockProvider
 
@@ -132,7 +132,11 @@ const getVec = (v: Vec3, dir: Vec3) => {
   return v.plus(dir)
 }
 
-function renderLiquid (world: World, cursor: Vec3, texture: any | undefined, type: number, biome: string, water: boolean, attr: MesherGeometryOutput, isRealWater: boolean) {
+function renderLiquid (world: World, cursor: Vec3, texture: any | undefined, type: number, biome: string, water: boolean, attr: MesherGeometryOutput, isRealWater: boolean, instancingEnabled: boolean) {
+  if (instancingEnabled) {
+    return // todo
+  }
+
   const heights: number[] = []
   for (let z = -1; z <= 1; z++) {
     for (let x = -1; x <= 1; x++) {
@@ -518,9 +522,63 @@ const isBlockWaterlogged = (block: Block) => {
   return block.getProperties().waterlogged === true || block.getProperties().waterlogged === 'true' || ALWAYS_WATERLOGGED.has(block.name)
 }
 
+const shouldCullInstancedBlock = (world: World, cursor: Vec3, block: Block): boolean => {
+  // Early return for blocks that should never be culled
+  if (block.transparent) return false
+
+  // Check if all 6 faces would be culled (hidden by neighbors)
+  const cullIfIdentical = block.name.includes('glass') || block.name.includes('ice')
+
+  // Cache cursor offset to avoid creating new Vec3 instances
+  const offsetCursor = new Vec3(0, 0, 0)
+
+  // eslint-disable-next-line guard-for-in
+  for (const face in elemFaces) {
+    const { dir } = elemFaces[face]
+    offsetCursor.set(cursor.x + dir[0], cursor.y + dir[1], cursor.z + dir[2])
+    const neighbor = world.getBlock(offsetCursor, blockProvider, {})
+
+    // Face is exposed to air/void - block must be rendered
+    if (!neighbor) return false
+
+    // Handle special case for identical blocks (glass/ice)
+    if (cullIfIdentical && neighbor.stateId === block.stateId) continue
+
+    // If neighbor is not a full opaque cube, face is visible
+    if (neighbor.transparent || !isCube(neighbor)) return false
+  }
+
+  // All faces are culled, block should not be rendered
+  return true
+}
+
+// Add matrix calculation helper
+function calculateInstanceMatrix (pos: { x: number, y: number, z: number }, offset = 0.5): number[] {
+  // Create a 4x4 matrix array (16 elements)
+  const matrix = Array.from({ length: 16 }).fill(0) as number[]
+
+  // Set identity matrix
+  matrix[0] = 1 // m11
+  matrix[5] = 1 // m22
+  matrix[10] = 1 // m33
+  matrix[15] = 1 // m44
+
+  // Set translation (position)
+  matrix[12] = pos.x + offset // tx
+  matrix[13] = pos.y + offset // ty
+  matrix[14] = pos.z + offset // tz
+
+  return matrix
+}
+
 let unknownBlockModel: BlockModelPartsResolved
-export function getSectionGeometry (sx: number, sy: number, sz: number, world: World) {
+
+export function getSectionGeometry (sx: number, sy: number, sz: number, world: World, instancingMode = InstancingMode.None): MesherGeometryOutput {
   let delayedRender = [] as Array<() => void>
+
+  // Check if instanced rendering is enabled for this section
+  const enableInstancedRendering = instancingMode !== InstancingMode.None
+  const forceInstancedOnly = instancingMode === InstancingMode.BlockInstancingOnly || instancingMode === InstancingMode.ColorOnly
 
   const attr: MesherGeometryOutput = {
     sx: sx + 8,
@@ -543,7 +601,8 @@ export function getSectionGeometry (sx: number, sy: number, sz: number, world: W
     signs: {},
     // isFull: true,
     hadErrors: false,
-    blocksCount: 0
+    blocksCount: 0,
+    instancedBlocks: {}
   }
 
   const cursor = new Vec3(0, 0, 0)
@@ -606,14 +665,56 @@ export function getSectionGeometry (sx: number, sy: number, sz: number, world: W
           const pos = cursor.clone()
           // eslint-disable-next-line @typescript-eslint/no-loop-func
           delayedRender.push(() => {
-            renderLiquid(world, pos, blockProvider.getTextureInfo('water_still'), block.type, biome, true, attr, !isWaterlogged)
+            renderLiquid(world, pos, blockProvider.getTextureInfo('water_still'), block.type, biome, true, attr, !isWaterlogged, forceInstancedOnly)
           })
           attr.blocksCount++
         } else if (block.name === 'lava') {
-          renderLiquid(world, cursor, blockProvider.getTextureInfo('lava_still'), block.type, biome, false, attr, false)
+          renderLiquid(world, cursor, blockProvider.getTextureInfo('lava_still'), block.type, biome, false, attr, false, forceInstancedOnly)
           attr.blocksCount++
         }
         if (block.name !== 'water' && block.name !== 'lava' && !INVISIBLE_BLOCKS.has(block.name)) {
+          // Check if this block can use instanced rendering
+          if ((enableInstancedRendering && isBlockInstanceable(world, block))/*  || forceInstancedOnly */) {
+            // Check if block should be culled (all faces hidden by neighbors)
+            // TODO validate this
+            if (shouldCullInstancedBlock(world, cursor, block)) {
+              // Block is completely surrounded, skip rendering
+              continue
+            }
+
+            const blockKey = block.name
+            if (!attr.instancedBlocks[blockKey]) {
+              attr.instancedBlocks[blockKey] = {
+                stateId: block.stateId,
+                blockName: block.name,
+                positions: [],
+                matrices: [] // Add matrices array
+              }
+            }
+
+            const pos = {
+              x: cursor.x,
+              y: cursor.y,
+              z: cursor.z
+            }
+
+            // Pre-calculate transformation matrix
+            const offset = instancingMode === InstancingMode.ColorOnly ? 0 : 0.5
+            const matrix = calculateInstanceMatrix(pos, offset)
+
+            attr.instancedBlocks[blockKey].positions.push(pos)
+            attr.instancedBlocks[blockKey].matrices.push(matrix)
+
+            attr.blocksCount++
+            continue // Skip regular geometry generation for instanceable blocks
+          }
+
+          // Skip buffer geometry generation if force instanced only mode is enabled
+          if (forceInstancedOnly) {
+            // In force instanced only mode, skip all non-instanceable blocks
+            continue
+          }
+
           // cache
           let { models } = block
 

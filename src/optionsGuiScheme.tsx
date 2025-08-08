@@ -6,7 +6,7 @@ import { versionToNumber } from 'mc-assets/dist/utils'
 import { gameAdditionalState, miscUiState, openOptionsMenu, showModal } from './globalState'
 import { AppOptions, getChangedSettings, options, resetOptions } from './optionsStorage'
 import Button from './react/Button'
-import { OptionMeta, OptionSlider } from './react/OptionsItems'
+import { OptionButton, OptionMeta, OptionSlider } from './react/OptionsItems'
 import Slider from './react/Slider'
 import { getScreenRefreshRate } from './utils'
 import { setLoadingScreenStatus } from './appStatus'
@@ -113,6 +113,52 @@ export const guiOptionsScheme: {
       rendererPerfDebugOverlay: {
         text: 'Performance Debug',
       }
+    },
+    {
+      custom () {
+        let status = 'OFF'
+        const { useInstancedRendering, forceInstancedOnly, enableSingleColorMode } = useSnapshot(options)
+        if (useInstancedRendering) {
+          status = 'ON'
+          if (enableSingleColorMode) {
+            status = 'ON (single color)'
+          } else if (forceInstancedOnly) {
+            status = 'ON (force)'
+          }
+        }
+
+        return <OptionButton
+          item={{
+            type: 'toggle',
+            text: 'Instacing',
+            requiresChunksReload: true,
+          }}
+          cacheKey='instacing'
+          valueText={status}
+          onClick={() => {
+            // cycle
+            if (useInstancedRendering) {
+              if (enableSingleColorMode) {
+                options.useInstancedRendering = false
+                options.enableSingleColorMode = false
+                options.forceInstancedOnly = false
+              } else if (forceInstancedOnly) {
+                options.useInstancedRendering = true
+                options.enableSingleColorMode = true
+                options.forceInstancedOnly = false
+              } else {
+                options.useInstancedRendering = true
+                options.enableSingleColorMode = false
+                options.forceInstancedOnly = true
+              }
+            } else {
+              options.useInstancedRendering = true
+              options.enableSingleColorMode = false
+              options.forceInstancedOnly = false
+            }
+          }}
+        />
+      },
     },
     {
       custom () {

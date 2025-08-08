@@ -1,21 +1,17 @@
 import * as THREE from 'three'
 import { Vec3 } from 'vec3'
-import nbt from 'prismarine-nbt'
-import PrismarineChatLoader from 'prismarine-chat'
 import * as tweenJs from '@tweenjs/tween.js'
-import { renderSign } from '../sign-renderer'
 import { DisplayWorldOptions, GraphicsInitOptions } from '../../../src/appViewer'
-import { chunkPos, sectionPos } from '../lib/simpleUtils'
+import { sectionPos } from '../lib/simpleUtils'
 import { WorldRendererCommon } from '../lib/worldrendererCommon'
+import { WorldDataEmitterWorker } from '../lib/worldDataEmitter'
 import { addNewStat } from '../lib/ui/newStats'
-import { MesherGeometryOutput } from '../lib/mesher/shared'
+import { MesherGeometryOutput, InstancingMode } from '../lib/mesher/shared'
 import { ItemSpecificContextProperties } from '../lib/basePlayerState'
 import { setBlockPosition } from '../lib/mesher/standaloneRenderer'
 import { getMyHand } from './hand'
 import HoldingBlock from './holdingBlock'
-import { getMesh } from './entity/EntityMesh'
-import { armorModel } from './entity/armorModels'
-import { disposeObject, loadThreeJsTextureFromBitmap } from './threeJsUtils'
+import { loadThreeJsTextureFromBitmap } from './threeJsUtils'
 import { CursorBlock } from './world/cursorBlock'
 import { getItemUv } from './appShared'
 import { Entities } from './entities'
@@ -23,19 +19,23 @@ import { ThreeJsSound } from './threeJsSound'
 import { CameraShake } from './cameraShake'
 import { ThreeJsMedia } from './threeJsMedia'
 import { Fountain } from './threeJsParticles'
+import { InstancedRenderer } from './instancedRenderer'
+import { ChunkMeshManager } from './chunkMeshManager'
 
 type SectionKey = string
 
 export class WorldRendererThree extends WorldRendererCommon {
   outputFormat = 'threeJs' as const
-  sectionObjects: Record<string, THREE.Object3D & { foutain?: boolean }> = {}
+  sectionInstancingMode: Record<string, InstancingMode> = {}
   chunkTextures = new Map<string, { [pos: string]: THREE.Texture }>()
   signsCache = new Map<string, any>()
   starField: StarField
   cameraSectionPos: Vec3 = new Vec3(0, 0, 0)
-  holdingBlock: HoldingBlock
-  holdingBlockLeft: HoldingBlock
-  scene = new THREE.Scene()
+  holdingBlock: HoldingBlock | undefined
+  holdingBlockLeft: HoldingBlock | undefined
+  realScene = new THREE.Scene()
+  scene = new THREE.Group()
+  templateScene = new THREE.Scene()
   ambientLight = new THREE.AmbientLight(0xcc_cc_cc)
   directionalLight = new THREE.DirectionalLight(0xff_ff_ff, 0.5)
   entities = new Entities(this)
@@ -47,9 +47,12 @@ export class WorldRendererThree extends WorldRendererCommon {
   cameraShake: CameraShake
   cameraContainer: THREE.Object3D
   media: ThreeJsMedia
+  instancedRenderer: InstancedRenderer | undefined
+  chunkMeshManager: ChunkMeshManager
   waitingChunksToDisplay = {} as { [chunkKey: string]: SectionKey[] }
   camera: THREE.PerspectiveCamera
   renderTimeAvg = 0
+  chunkBoxMaterial = new THREE.MeshBasicMaterial({ color: 0x00_00_00, transparent: true, opacity: 0 })
   sectionsOffsetsAnimations = {} as {
     [chunkKey: string]: {
       time: number,
@@ -72,13 +75,14 @@ export class WorldRendererThree extends WorldRendererCommon {
 
   private currentPosTween?: tweenJs.Tween<THREE.Vector3>
   private currentRotTween?: tweenJs.Tween<{ pitch: number, yaw: number }>
+  private readonly worldOffset = new THREE.Vector3()
 
   get tilesRendered () {
-    return Object.values(this.sectionObjects).reduce((acc, obj) => acc + (obj as any).tilesCount, 0)
+    return this.chunkMeshManager.getTotalTiles()
   }
 
   get blocksRendered () {
-    return Object.values(this.sectionObjects).reduce((acc, obj) => acc + (obj as any).blocksCount, 0)
+    return this.chunkMeshManager.getTotalBlocks()
   }
 
   constructor (public renderer: THREE.WebGLRenderer, public initOptions: GraphicsInitOptions, public displayOptions: DisplayWorldOptions) {
@@ -94,11 +98,18 @@ export class WorldRendererThree extends WorldRendererCommon {
 
     this.addDebugOverlay()
     this.resetScene()
-    void this.init()
-
     this.soundSystem = new ThreeJsSound(this)
     this.cameraShake = new CameraShake(this, this.onRender)
     this.media = new ThreeJsMedia(this)
+    this.instancedRenderer = new InstancedRenderer(this)
+    this.chunkMeshManager = new ChunkMeshManager(this, this.scene, this.material, this.worldSizeParams.worldHeight, this.viewDistance)
+
+    // Enable bypass pooling for debugging if URL param is present
+    if (new URLSearchParams(location.search).get('bypassMeshPooling') === 'true') {
+      this.chunkMeshManager.bypassPooling = true
+      console.log('ChunkMeshManager: Bypassing pooling for debugging')
+    }
+
     // this.fountain = new Fountain(this.scene, this.scene, {
     //   position: new THREE.Vector3(0, 10, 0),
     // })
@@ -107,6 +118,14 @@ export class WorldRendererThree extends WorldRendererCommon {
       this.finishChunk(chunkKey)
     })
     this.worldSwitchActions()
+
+    void this.init()
+  }
+
+  // Add this method to update world origin
+  private updateWorldOrigin (pos: THREE.Vector3) {
+    // this.worldOffset.copy(pos)
+    // this.scene.position.copy(this.worldOffset).multiplyScalar(-1)
   }
 
   get cameraObject () {
@@ -119,6 +138,15 @@ export class WorldRendererThree extends WorldRendererCommon {
       this.protocolCustomBlocks.clear()
       // Reset section animations
       this.sectionsOffsetsAnimations = {}
+    })
+  }
+
+  override connect (worldView: WorldDataEmitterWorker) {
+    super.connect(worldView)
+
+    // Add additional renderDistance handling for mesh pool updates
+    worldView.on('renderDistance', (viewDistance) => {
+      this.chunkMeshManager.updateViewDistance(viewDistance)
     })
   }
 
@@ -143,33 +171,44 @@ export class WorldRendererThree extends WorldRendererCommon {
     this.entities.handlePlayerEntity(e)
   }
 
+  resetTemplateScene () {
+    this.templateScene = new THREE.Scene()
+    this.templateScene.add(this.ambientLight.clone())
+    this.templateScene.add(this.directionalLight.clone())
+  }
+
   resetScene () {
     this.scene.matrixAutoUpdate = false // for perf
-    this.scene.background = new THREE.Color(this.initOptions.config.sceneBackground)
-    this.scene.add(this.ambientLight)
+    this.realScene.background = new THREE.Color(this.initOptions.config.sceneBackground)
+    this.realScene.add(this.ambientLight)
     this.directionalLight.position.set(1, 1, 0.5).normalize()
     this.directionalLight.castShadow = true
-    this.scene.add(this.directionalLight)
+    this.realScene.add(this.directionalLight)
 
     const size = this.renderer.getSize(new THREE.Vector2())
     this.camera = new THREE.PerspectiveCamera(75, size.x / size.y, 0.1, 1000)
     this.cameraContainer = new THREE.Object3D()
     this.cameraContainer.add(this.camera)
-    this.scene.add(this.cameraContainer)
+    this.realScene.add(this.cameraContainer)
+    this.realScene.add(this.scene)
+
+    this.resetTemplateScene()
   }
 
   override watchReactivePlayerState () {
     super.watchReactivePlayerState()
     this.onReactivePlayerStateUpdated('inWater', (value) => {
-      this.scene.fog = value ? new THREE.Fog(0x00_00_ff, 0.1, this.playerStateReactive.waterBreathing ? 100 : 20) : null
+      this.realScene.fog = value ? new THREE.Fog(0x00_00_ff, 0.1, this.playerStateReactive.waterBreathing ? 100 : 20) : null
     })
     this.onReactivePlayerStateUpdated('ambientLight', (value) => {
       if (!value) return
       this.ambientLight.intensity = value
+      this.resetTemplateScene()
     })
     this.onReactivePlayerStateUpdated('directionalLight', (value) => {
       if (!value) return
       this.directionalLight.intensity = value
+      this.resetTemplateScene()
     })
     this.onReactivePlayerStateUpdated('lookingAtBlock', (value) => {
       this.cursorBlock.setHighlightCursorBlock(value ? new Vec3(value.x, value.y, value.z) : null, value?.shapes)
@@ -185,19 +224,34 @@ export class WorldRendererThree extends WorldRendererCommon {
     })
   }
 
+  getInstancedBlocksData () {
+    const config = this.instancedRenderer?.getInstancedBlocksConfig()
+    if (!config) return undefined
+
+    return {
+      instanceableBlocks: config.instanceableBlocks,
+    }
+  }
+
   override watchReactiveConfig () {
     super.watchReactiveConfig()
     this.onReactiveConfigUpdated('showChunkBorders', (value) => {
-      this.updateShowChunksBorder(value)
+      this.updateShowChunksBorder()
+    })
+    this.onReactiveConfigUpdated('enableDebugOverlay', (value) => {
+      if (!value) {
+        // restore visibility
+        this.chunkMeshManager.updateSectionsVisibility()
+      }
     })
   }
 
   changeHandSwingingState (isAnimationPlaying: boolean, isLeft = false) {
     const holdingBlock = isLeft ? this.holdingBlockLeft : this.holdingBlock
     if (isAnimationPlaying) {
-      holdingBlock.startSwing()
+      holdingBlock?.startSwing()
     } else {
-      holdingBlock.stopSwing()
+      holdingBlock?.stopSwing()
     }
   }
 
@@ -224,8 +278,12 @@ export class WorldRendererThree extends WorldRendererCommon {
       oldItemsTexture.dispose()
     }
 
+    // Prepare and initialize instanced renderer with dynamic block detection
+    this.instancedRenderer?.prepareAndInitialize()
+
     await super.updateAssetsData()
     this.onAllTexturesLoaded()
+
     if (Object.keys(this.loadedChunks).length > 0) {
       console.log('rerendering chunks because of texture update')
       this.rerenderAllChunks()
@@ -233,14 +291,18 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   onAllTexturesLoaded () {
-    this.holdingBlock.ready = true
-    this.holdingBlock.updateItem()
-    this.holdingBlockLeft.ready = true
-    this.holdingBlockLeft.updateItem()
+    if (this.holdingBlock) {
+      this.holdingBlock.ready = true
+      this.holdingBlock.updateItem()
+    }
+    if (this.holdingBlockLeft) {
+      this.holdingBlockLeft.ready = true
+      this.holdingBlockLeft.updateItem()
+    }
   }
 
   changeBackgroundColor (color: [number, number, number]): void {
-    this.scene.background = new THREE.Color(color[0], color[1], color[2])
+    this.realScene.background = new THREE.Color(color[0], color[1], color[2])
   }
 
   timeUpdated (newTime: number): void {
@@ -294,12 +356,20 @@ export class WorldRendererThree extends WorldRendererCommon {
         const formatBigNumber = (num: number) => {
           return new Intl.NumberFormat('en-US', {}).format(num)
         }
+        const instancedStats = this.instancedRenderer?.getStats()
         let text = ''
         text += `C: ${formatBigNumber(this.renderer.info.render.calls)} `
         text += `TR: ${formatBigNumber(this.renderer.info.render.triangles)} `
         text += `TE: ${formatBigNumber(this.renderer.info.memory.textures)} `
         text += `F: ${formatBigNumber(this.tilesRendered)} `
-        text += `B: ${formatBigNumber(this.blocksRendered)}`
+        text += `B: ${formatBigNumber(this.blocksRendered)} `
+        if (instancedStats) {
+          text += `I: ${formatBigNumber(instancedStats.totalInstances)}/${instancedStats.activeBlockTypes}t `
+          text += `DC: ${formatBigNumber(instancedStats.drawCalls)} `
+        }
+        const poolStats = this.chunkMeshManager.getStats()
+        const poolMode = this.chunkMeshManager.bypassPooling ? 'BYPASS' : poolStats.hitRate
+        text += `MP: ${poolStats.activeCount}/${poolStats.poolSize} ${poolMode}`
         pane.updateText(text)
         this.backendInfoReport = text
       }
@@ -313,8 +383,8 @@ export class WorldRendererThree extends WorldRendererCommon {
     const [x, y, z] = key.split(',').map(x => Math.floor(+x / 16))
     // sum of distances: x + y + z
     const chunkDistance = Math.abs(x - this.cameraSectionPos.x) + Math.abs(y - this.cameraSectionPos.y) + Math.abs(z - this.cameraSectionPos.z)
-    const section = this.sectionObjects[key].children.find(child => child.name === 'mesh')!
-    section.renderOrder = 500 - chunkDistance
+    const sectionObject = this.chunkMeshManager.getSectionObject(key)!
+    sectionObject.mesh!.renderOrder = 500 - chunkDistance
   }
 
   override updateViewerPosition (pos: Vec3): void {
@@ -323,10 +393,22 @@ export class WorldRendererThree extends WorldRendererCommon {
 
   cameraSectionPositionUpdate () {
     // eslint-disable-next-line guard-for-in
-    for (const key in this.sectionObjects) {
-      const value = this.sectionObjects[key]
-      if (!value) continue
-      this.updatePosDataChunk(key)
+    for (const key in this.sectionInstancingMode) {
+      const sectionObject = this.chunkMeshManager.getSectionObject(key)!
+      if (sectionObject) {
+        this.updatePosDataChunk(key)
+      }
+
+      if (this.worldRendererConfig.dynamicInstancing) {
+        const [x, y, z] = key.split(',').map(x => +x)
+        const pos = new Vec3(x, y, z)
+        const instancingMode = this.getInstancingMode(pos)
+        if (instancingMode !== this.sectionInstancingMode[key]) {
+          // console.log('update section', key, this.sectionInstancingMode[key], '->', instancingMode)
+          // update section
+          this.setSectionDirty(pos)
+        }
+      }
     }
   }
 
@@ -337,123 +419,68 @@ export class WorldRendererThree extends WorldRendererCommon {
 
   finishChunk (chunkKey: string) {
     for (const sectionKey of this.waitingChunksToDisplay[chunkKey] ?? []) {
-      this.sectionObjects[sectionKey].visible = true
+      const sectionObject = this.chunkMeshManager.getSectionObject(sectionKey)
+      if (sectionObject) {
+        sectionObject.visible = true
+      }
     }
     delete this.waitingChunksToDisplay[chunkKey]
   }
 
-  // debugRecomputedDeletedObjects = 0
   handleWorkerMessage (data: { geometry: MesherGeometryOutput, key, type }): void {
     if (data.type !== 'geometry') return
-    let object: THREE.Object3D = this.sectionObjects[data.key]
-    if (object) {
-      this.scene.remove(object)
-      disposeObject(object)
-      delete this.sectionObjects[data.key]
-    }
 
     const chunkCoords = data.key.split(',')
-    if (!this.loadedChunks[chunkCoords[0] + ',' + chunkCoords[2]] || !data.geometry.positions.length || !this.active) return
+    const chunkKey = chunkCoords[0] + ',' + chunkCoords[2]
 
-    // if (object) {
-    //   this.debugRecomputedDeletedObjects++
-    // }
+    const hasInstancedBlocks = data.geometry.instancedBlocks && Object.keys(data.geometry.instancedBlocks).length > 0
 
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(data.geometry.positions, 3))
-    geometry.setAttribute('normal', new THREE.BufferAttribute(data.geometry.normals, 3))
-    geometry.setAttribute('color', new THREE.BufferAttribute(data.geometry.colors, 3))
-    geometry.setAttribute('uv', new THREE.BufferAttribute(data.geometry.uvs, 2))
-    geometry.index = new THREE.BufferAttribute(data.geometry.indices as Uint32Array | Uint16Array, 1)
+    this.instancedRenderer?.removeSectionInstances(data.key)
 
-    const mesh = new THREE.Mesh(geometry, this.material)
-    mesh.position.set(data.geometry.sx, data.geometry.sy, data.geometry.sz)
-    mesh.name = 'mesh'
-    object = new THREE.Group()
-    object.add(mesh)
-    // mesh with static dimensions: 16x16x16
-    const staticChunkMesh = new THREE.Mesh(new THREE.BoxGeometry(16, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00_00_00, transparent: true, opacity: 0 }))
-    staticChunkMesh.position.set(data.geometry.sx, data.geometry.sy, data.geometry.sz)
-    const boxHelper = new THREE.BoxHelper(staticChunkMesh, 0xff_ff_00)
-    boxHelper.name = 'helper'
-    object.add(boxHelper)
-    object.name = 'chunk';
-    (object as any).tilesCount = data.geometry.positions.length / 3 / 4;
-    (object as any).blocksCount = data.geometry.blocksCount
-    if (!this.displayOptions.inWorldRenderingConfig.showChunkBorders) {
-      boxHelper.visible = false
+    // Handle instanced blocks data from worker
+    if (hasInstancedBlocks) {
+      this.instancedRenderer?.handleInstancedBlocksFromWorker(data.geometry.instancedBlocks, data.key, this.getInstancingMode(new Vec3(chunkCoords[0], chunkCoords[1], chunkCoords[2])))
     }
-    // should not compute it once
-    if (Object.keys(data.geometry.signs).length) {
-      for (const [posKey, { isWall, isHanging, rotation }] of Object.entries(data.geometry.signs)) {
-        const signBlockEntity = this.blockEntities[posKey]
-        if (!signBlockEntity) continue
-        const [x, y, z] = posKey.split(',')
-        const sign = this.renderSign(new Vec3(+x, +y, +z), rotation, isWall, isHanging, nbt.simplify(signBlockEntity))
-        if (!sign) continue
-        object.add(sign)
-      }
+
+    // Check if chunk should be loaded and has geometry
+    if (!this.loadedChunks[chunkKey] || !data.geometry.positions.length || !this.active) {
+      // Release any existing section from the pool
+      this.chunkMeshManager.releaseSection(data.key)
+      return
     }
-    if (Object.keys(data.geometry.heads).length) {
-      for (const [posKey, { isWall, rotation }] of Object.entries(data.geometry.heads)) {
-        const headBlockEntity = this.blockEntities[posKey]
-        if (!headBlockEntity) continue
-        const [x, y, z] = posKey.split(',')
-        const head = this.renderHead(new Vec3(+x, +y, +z), rotation, isWall, nbt.simplify(headBlockEntity))
-        if (!head) continue
-        object.add(head)
-      }
+
+    // Use ChunkMeshManager for optimized mesh handling
+    const sectionObject = this.chunkMeshManager.updateSection(data.key, data.geometry)
+
+    if (!sectionObject) {
+      return
     }
-    this.sectionObjects[data.key] = object
+
+
+    this.updateBoxHelper(data.key)
+
+    // Handle chunk-based rendering
     if (this.displayOptions.inWorldRenderingConfig._renderByChunks) {
-      object.visible = false
+      sectionObject.visible = false
       const chunkKey = `${chunkCoords[0]},${chunkCoords[2]}`
       this.waitingChunksToDisplay[chunkKey] ??= []
       this.waitingChunksToDisplay[chunkKey].push(data.key)
       if (this.finishedChunks[chunkKey]) {
-        // todo it might happen even when it was not an update
         this.finishChunk(chunkKey)
       }
     }
 
     this.updatePosDataChunk(data.key)
-    object.matrixAutoUpdate = false
-    mesh.onAfterRender = (renderer, scene, camera, geometry, material, group) => {
-      // mesh.matrixAutoUpdate = false
-    }
-
-    this.scene.add(object)
-  }
-
-  getSignTexture (position: Vec3, blockEntity, isHanging, backSide = false) {
-    const chunk = chunkPos(position)
-    let textures = this.chunkTextures.get(`${chunk[0]},${chunk[1]}`)
-    if (!textures) {
-      textures = {}
-      this.chunkTextures.set(`${chunk[0]},${chunk[1]}`, textures)
-    }
-    const texturekey = `${position.x},${position.y},${position.z}`
-    // todo investigate bug and remove this so don't need to clean in section dirty
-    if (textures[texturekey]) return textures[texturekey]
-
-    const PrismarineChat = PrismarineChatLoader(this.version)
-    const canvas = renderSign(blockEntity, isHanging, PrismarineChat)
-    if (!canvas) return
-    const tex = new THREE.Texture(canvas)
-    tex.magFilter = THREE.NearestFilter
-    tex.minFilter = THREE.NearestFilter
-    tex.needsUpdate = true
-    textures[texturekey] = tex
-    return tex
   }
 
   getCameraPosition () {
     const worldPos = new THREE.Vector3()
     this.camera.getWorldPosition(worldPos)
-    return worldPos
+    // Add world offset to get true world position
+    return worldPos.add(this.worldOffset)
   }
 
-  getWorldCameraPosition () {
+  getSectionCameraPosition () {
     const pos = this.getCameraPosition()
     return new Vec3(
       Math.floor(pos.x / 16),
@@ -463,7 +490,7 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   updateCameraSectionPos () {
-    const newSectionPos = this.getWorldCameraPosition()
+    const newSectionPos = this.getSectionCameraPosition()
     if (!this.cameraSectionPos.equals(newSectionPos)) {
       this.cameraSectionPos = newSectionPos
       this.cameraSectionPositionUpdate()
@@ -472,6 +499,17 @@ export class WorldRendererThree extends WorldRendererCommon {
 
   setFirstPersonCamera (pos: Vec3 | null, yaw: number, pitch: number) {
     const yOffset = this.playerStateReactive.eyeHeight
+
+    if (pos) {
+      // Convert Vec3 to THREE.Vector3
+      const worldPos = new THREE.Vector3(pos.x, pos.y + yOffset, pos.z)
+
+      // Update world origin before updating camera
+      this.updateWorldOrigin(worldPos)
+
+      // Keep camera at origin and move world instead
+      // this.cameraObject.position.set(pos.x, pos.y + yOffset, pos.z)
+    }
 
     this.updateCamera(pos?.offset(0, yOffset, 0) ?? null, yaw, pitch)
     this.media.tryIntersectMedia()
@@ -517,7 +555,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     raycaster.far = distance // Limit raycast distance
 
     // Filter to only nearby chunks for performance
-    const nearbyChunks = Object.values(this.sectionObjects)
+    const nearbyChunks = Object.values(this.chunkMeshManager.sectionObjects)
       .filter(obj => obj.name === 'chunk' && obj.visible)
       .filter(obj => {
         // Get the mesh child which has the actual geometry
@@ -675,7 +713,7 @@ export class WorldRendererThree extends WorldRendererCommon {
       chunksRenderBelowOverride !== undefined ||
       chunksRenderDistanceOverride !== undefined
     ) {
-      for (const [key, object] of Object.entries(this.sectionObjects)) {
+      for (const [key, object] of Object.entries(this.chunkMeshManager.sectionObjects)) {
         const [x, y, z] = key.split(',').map(Number)
         const isVisible =
           // eslint-disable-next-line no-constant-binary-expression, sonarjs/no-redundant-boolean
@@ -686,10 +724,6 @@ export class WorldRendererThree extends WorldRendererCommon {
           (chunksRenderDistanceEnabled && chunksRenderDistanceOverride !== undefined) ? Math.abs(y - baseY) <= chunksRenderDistanceOverride : true
 
         object.visible = isVisible
-      }
-    } else {
-      for (const object of Object.values(this.sectionObjects)) {
-        object.visible = true
       }
     }
   }
@@ -716,7 +750,7 @@ export class WorldRendererThree extends WorldRendererCommon {
 
     // eslint-disable-next-line @typescript-eslint/non-nullable-type-assertion-style
     const cam = this.cameraGroupVr instanceof THREE.Group ? this.cameraGroupVr.children.find(child => child instanceof THREE.PerspectiveCamera) as THREE.PerspectiveCamera : this.camera
-    this.renderer.render(this.scene, cam)
+    this.renderer.render(this.realScene, cam)
 
     if (
       this.displayOptions.inWorldRenderingConfig.showHand &&
@@ -725,14 +759,15 @@ export class WorldRendererThree extends WorldRendererCommon {
       // !this.freeFlyMode &&
       !this.renderer.xr.isPresenting
     ) {
-      this.holdingBlock.render(this.camera, this.renderer, this.ambientLight, this.directionalLight)
-      this.holdingBlockLeft.render(this.camera, this.renderer, this.ambientLight, this.directionalLight)
+      this.holdingBlock?.render(this.renderer)
+      this.holdingBlockLeft?.render(this.renderer)
     }
 
     for (const fountain of this.fountains) {
-      if (this.sectionObjects[fountain.sectionId] && !this.sectionObjects[fountain.sectionId].foutain) {
-        fountain.createParticles(this.sectionObjects[fountain.sectionId])
-        this.sectionObjects[fountain.sectionId].foutain = true
+      const sectionObject = this.chunkMeshManager.getSectionObject(fountain.sectionId)
+      if (sectionObject && !sectionObject.fountain) {
+        fountain.createParticles(sectionObject)
+        sectionObject.fountain = true
       }
       fountain.render()
     }
@@ -742,87 +777,18 @@ export class WorldRendererThree extends WorldRendererCommon {
     }
     const end = performance.now()
     const totalTime = end - start
+
+    if (this.worldRendererConfig.autoLowerRenderDistance) {
+      // Record render time for performance monitoring
+      this.chunkMeshManager.recordRenderTime(totalTime)
+    }
+
     this.renderTimeAvgCount++
     this.renderTimeAvg = ((this.renderTimeAvg * (this.renderTimeAvgCount - 1)) + totalTime) / this.renderTimeAvgCount
     this.renderTimeMax = Math.max(this.renderTimeMax, totalTime)
     this.currentRenderedFrames++
   }
 
-  renderHead (position: Vec3, rotation: number, isWall: boolean, blockEntity) {
-    const textures = blockEntity.SkullOwner?.Properties?.textures[0]
-    if (!textures) return
-
-    try {
-      const textureData = JSON.parse(Buffer.from(textures.Value, 'base64').toString())
-      let skinUrl = textureData.textures?.SKIN?.url
-      const { skinTexturesProxy } = this.worldRendererConfig
-      if (skinTexturesProxy) {
-        skinUrl = skinUrl?.replace('http://textures.minecraft.net/', skinTexturesProxy)
-          .replace('https://textures.minecraft.net/', skinTexturesProxy)
-      }
-
-      const mesh = getMesh(this, skinUrl, armorModel.head)
-      const group = new THREE.Group()
-      if (isWall) {
-        mesh.position.set(0, 0.3125, 0.3125)
-      }
-      // move head model down as armor have a different offset than blocks
-      mesh.position.y -= 23 / 16
-      group.add(mesh)
-      group.position.set(position.x + 0.5, position.y + 0.045, position.z + 0.5)
-      group.rotation.set(
-        0,
-        -THREE.MathUtils.degToRad(rotation * (isWall ? 90 : 45 / 2)),
-        0
-      )
-      group.scale.set(0.8, 0.8, 0.8)
-      return group
-    } catch (err) {
-      console.error('Error decoding player texture:', err)
-    }
-  }
-
-  renderSign (position: Vec3, rotation: number, isWall: boolean, isHanging: boolean, blockEntity) {
-    const tex = this.getSignTexture(position, blockEntity, isHanging)
-
-    if (!tex) return
-
-    // todo implement
-    // const key = JSON.stringify({ position, rotation, isWall })
-    // if (this.signsCache.has(key)) {
-    //   console.log('cached', key)
-    // } else {
-    //   this.signsCache.set(key, tex)
-    // }
-
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true }))
-    mesh.renderOrder = 999
-
-    const lineHeight = 7 / 16
-    const scaleFactor = isHanging ? 1.3 : 1
-    mesh.scale.set(1 * scaleFactor, lineHeight * scaleFactor, 1 * scaleFactor)
-
-    const thickness = (isHanging ? 2 : 1.5) / 16
-    const wallSpacing = 0.25 / 16
-    if (isWall && !isHanging) {
-      mesh.position.set(0, 0, -0.5 + thickness + wallSpacing + 0.0001)
-    } else {
-      mesh.position.set(0, 0, thickness / 2 + 0.0001)
-    }
-
-    const group = new THREE.Group()
-    group.rotation.set(
-      0,
-      -THREE.MathUtils.degToRad(rotation * (isWall ? 90 : 45 / 2)),
-      0
-    )
-    group.add(mesh)
-    const height = (isHanging ? 10 : 8) / 16
-    const heightOffset = (isHanging ? 0 : isWall ? 4.333 : 9.333) / 16
-    const textPosition = height / 2 + heightOffset
-    group.position.set(position.x + 0.5, position.y + textPosition, position.z + 0.5)
-    return group
-  }
 
   lightUpdate (chunkX: number, chunkZ: number) {
     // set all sections in the chunk dirty
@@ -832,26 +798,27 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   rerenderAllChunks () { // todo not clear what to do with loading chunks
-    for (const key of Object.keys(this.sectionObjects)) {
+    for (const key of Object.keys(this.chunkMeshManager.sectionObjects)) {
       const [x, y, z] = key.split(',').map(Number)
       this.setSectionDirty(new Vec3(x, y, z))
     }
   }
 
-  updateShowChunksBorder (value: boolean) {
-    for (const object of Object.values(this.sectionObjects)) {
-      for (const child of object.children) {
-        if (child.name === 'helper') {
-          child.visible = value
-        }
-      }
+  updateShowChunksBorder () {
+    for (const key of Object.keys(this.chunkMeshManager.sectionObjects)) {
+      this.updateBoxHelper(key)
     }
+  }
+
+  updateBoxHelper (key: string) {
+    const { showChunkBorders } = this.worldRendererConfig
+    this.chunkMeshManager.updateBoxHelper(key, showChunkBorders, this.chunkBoxMaterial)
   }
 
   resetWorld () {
     super.resetWorld()
 
-    for (const mesh of Object.values(this.sectionObjects)) {
+    for (const mesh of Object.values(this.chunkMeshManager.sectionObjects)) {
       this.scene.remove(mesh)
     }
 
@@ -868,7 +835,7 @@ export class WorldRendererThree extends WorldRendererCommon {
 
   getLoadedChunksRelative (pos: Vec3, includeY = false) {
     const [currentX, currentY, currentZ] = sectionPos(pos)
-    return Object.fromEntries(Object.entries(this.sectionObjects).map(([key, o]) => {
+    return Object.fromEntries(Object.entries(this.chunkMeshManager.sectionObjects).map(([key, o]) => {
       const [xRaw, yRaw, zRaw] = key.split(',').map(Number)
       const [x, y, z] = sectionPos({ x: xRaw, y: yRaw, z: zRaw })
       const setKey = includeY ? `${x - currentX},${y - currentY},${z - currentZ}` : `${x - currentX},${z - currentZ}`
@@ -885,12 +852,13 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   readdChunks () {
-    for (const key of Object.keys(this.sectionObjects)) {
-      this.scene.remove(this.sectionObjects[key])
+    const { sectionObjects } = this.chunkMeshManager
+    for (const key of Object.keys(sectionObjects)) {
+      this.scene.remove(sectionObjects[key])
     }
     setTimeout(() => {
-      for (const key of Object.keys(this.sectionObjects)) {
-        this.scene.add(this.sectionObjects[key])
+      for (const key of Object.keys(sectionObjects)) {
+        this.scene.add(sectionObjects[key])
       }
     }, 500)
   }
@@ -902,6 +870,11 @@ export class WorldRendererThree extends WorldRendererCommon {
     }
   }
 
+  removeCurrentChunk () {
+    const currentChunk = this.cameraSectionPos
+    this.removeColumn(currentChunk.x * 16, currentChunk.z * 16)
+  }
+
   removeColumn (x, z) {
     super.removeColumn(x, z)
 
@@ -909,19 +882,47 @@ export class WorldRendererThree extends WorldRendererCommon {
     for (let y = this.worldSizeParams.minY; y < this.worldSizeParams.worldHeight; y += 16) {
       this.setSectionDirty(new Vec3(x, y, z), false)
       const key = `${x},${y},${z}`
-      const mesh = this.sectionObjects[key]
-      if (mesh) {
-        this.scene.remove(mesh)
-        disposeObject(mesh)
-      }
-      delete this.sectionObjects[key]
+
+      // Remove instanced blocks for this section
+      this.instancedRenderer?.removeSectionInstances(key)
+
+      // Release section from mesh pool (this will also remove from scene)
+      this.chunkMeshManager.releaseSection(key)
     }
   }
 
-  setSectionDirty (...args: Parameters<WorldRendererCommon['setSectionDirty']>) {
-    const [pos] = args
+  getInstancingMode (pos: Vec3) {
+    const { useInstancedRendering, enableSingleColorMode, forceInstancedOnly, dynamicInstancing, dynamicInstancingModeDistance, dynamicColorModeDistance } = this.worldRendererConfig
+    let instancingMode = InstancingMode.None
+
+    if (useInstancedRendering || enableSingleColorMode) {
+      instancingMode = enableSingleColorMode
+        ? InstancingMode.ColorOnly
+        : forceInstancedOnly
+          ? InstancingMode.BlockInstancingOnly
+          : InstancingMode.BlockInstancing
+    } else if (dynamicInstancing) {
+      const dx = pos.x / 16 - this.cameraSectionPos.x
+      const dz = pos.z / 16 - this.cameraSectionPos.z
+      const distance = Math.floor(Math.hypot(dx, dz))
+      // console.log('distance', distance, `${pos.x},${pos.y},${pos.z}`)
+      if (distance > dynamicColorModeDistance) {
+        instancingMode = InstancingMode.ColorOnly
+      } else if (distance > dynamicInstancingModeDistance) {
+        instancingMode = InstancingMode.BlockInstancingOnly
+      }
+    }
+
+    return instancingMode
+  }
+
+  setSectionDirty (pos: Vec3, value = true) {
     this.cleanChunkTextures(pos.x, pos.z) // todo don't do this!
-    super.setSectionDirty(...args)
+    const instancingMode = this.getInstancingMode(pos)
+    super.setSectionDirty(pos, value, undefined, instancingMode)
+    if (value) {
+      this.sectionInstancingMode[`${pos.x},${pos.y},${pos.z}`] = instancingMode
+    }
   }
 
   static getRendererInfo (renderer: THREE.WebGLRenderer) {
@@ -938,6 +939,8 @@ export class WorldRendererThree extends WorldRendererCommon {
   }
 
   destroy (): void {
+    this.instancedRenderer?.destroy()
+    this.chunkMeshManager.dispose()
     super.destroy()
   }
 
@@ -950,7 +953,7 @@ export class WorldRendererThree extends WorldRendererCommon {
     const chunkKey = `${chunkX},${chunkZ}`
     const sectionKey = `${chunkX},${sectionY},${chunkZ}`
 
-    return !!this.finishedChunks[chunkKey] || !!this.sectionObjects[sectionKey]
+    return !!this.finishedChunks[chunkKey] || !!this.chunkMeshManager.sectionObjects[sectionKey]
   }
 
   updateSectionOffsets () {
@@ -988,7 +991,7 @@ export class WorldRendererThree extends WorldRendererCommon {
       }
 
       // Apply the offset to the section object
-      const section = this.sectionObjects[key]
+      const section = this.chunkMeshManager.sectionObjects[key]
       if (section) {
         section.position.set(
           anim.currentOffsetX,

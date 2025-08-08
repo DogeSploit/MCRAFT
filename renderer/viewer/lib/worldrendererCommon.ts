@@ -12,7 +12,7 @@ import type { ResourcesManagerTransferred } from '../../../src/resourcesManager'
 import { DisplayWorldOptions, GraphicsInitOptions, RendererReactiveState } from '../../../src/appViewer'
 import { SoundSystem } from '../three/threeJsSound'
 import { buildCleanupDecorator } from './cleanupDecorator'
-import { HighestBlockInfo, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig, MesherMainEvent } from './mesher/shared'
+import { HighestBlockInfo, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig, MesherMainEvent, InstancingMode } from './mesher/shared'
 import { chunkPos } from './simpleUtils'
 import { addNewStat, removeAllStats, updatePanesVisibility, updateStatText } from './ui/newStats'
 import { WorldDataEmitterWorker } from './worldDataEmitter'
@@ -56,7 +56,16 @@ export const defaultWorldRendererConfig = {
   enableDebugOverlay: false,
   _experimentalSmoothChunkLoading: true,
   _renderByChunks: false,
-  volume: 1
+  volume: 1,
+  // New instancing options
+  useInstancedRendering: false,
+  forceInstancedOnly: false,
+  dynamicInstancing: false,
+  dynamicInstancingModeDistance: 1, // chunks beyond this distance use instancing only
+  dynamicColorModeDistance: 1, // chunks beyond this distance use color mode only
+  instancedOnlyDistance: 6, // chunks beyond this distance use instancing only
+  enableSingleColorMode: false, // ultra-performance mode with solid colors
+  autoLowerRenderDistance: false,
 }
 
 export type WorldRendererConfig = typeof defaultWorldRendererConfig
@@ -154,6 +163,9 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
   soundSystem: SoundSystem | undefined
 
   abstract changeBackgroundColor (color: [number, number, number]): void
+
+  // Optional method for getting instanced blocks data (implemented by Three.js renderer)
+  getInstancedBlocksData? (): { instanceableBlocks?: Set<number>, allBlocksStateIdToModelIdMap?: Record<number, number> } | undefined
 
   worldRendererConfig: WorldRendererConfig
   playerStateReactive: PlayerStateReactive
@@ -476,7 +488,6 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       this.allChunksFinished = true
       this.allLoadedIn ??= Date.now() - this.initialChunkLoadWasStartedIn!
     }
-    this.updateChunksStats()
   }
 
   changeHandSwingingState (isAnimationPlaying: boolean, isLeftHand: boolean): void { }
@@ -591,6 +602,10 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     const resources = this.resourcesManager.currentResources
 
     if (this.workers.length === 0) throw new Error('workers not initialized yet')
+
+    // Get instanceable blocks data if available (Three.js specific)
+    const instancedBlocksData = this.getInstancedBlocksData?.()
+
     for (const [i, worker] of this.workers.entries()) {
       const { blockstatesModels } = resources
 
@@ -602,6 +617,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         },
         blockstatesModels,
         config: this.getMesherConfig(),
+        instancedBlocks: instancedBlocksData?.instanceableBlocks ? [...instancedBlocksData.instanceableBlocks] : [],
+        instancedBlockIds: instancedBlocksData?.allBlocksStateIdToModelIdMap || {}
       })
     }
 
@@ -668,6 +685,11 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.finishedChunks[`${x},${z}`] = true
     this.logWorkerWork(`-> markAsLoaded ${JSON.stringify({ x, z })}`)
     this.checkAllFinished()
+  }
+
+  debugRemoveCurrentChunk () {
+    const [x, z] = chunkPos(this.viewerChunkPosition!)
+    this.removeColumn(x, z)
   }
 
   removeColumn (x, z) {
@@ -915,7 +937,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     return Promise.all(data)
   }
 
-  setSectionDirty (pos: Vec3, value = true, useChangeWorker = false) { // value false is used for unloading chunks
+  setSectionDirty (pos: Vec3, value = true, useChangeWorker = false, instancingMode = InstancingMode.None) { // value false is used for unloading chunks
     if (!this.forceCallFromMesherReplayer && this.mesherLogReader) return
 
     if (this.viewDistance === -1) throw new Error('viewDistance not set')
@@ -929,7 +951,7 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     // Dispatch sections to workers based on position
     // This guarantees uniformity accross workers and that a given section
     // is always dispatched to the same worker
-    const hash = this.getWorkerNumber(pos, useChangeWorker && this.mesherLogger.active)
+    const hash = this.getWorkerNumber(pos, this.mesherLogger.active)
     this.sectionsWaiting.set(key, (this.sectionsWaiting.get(key) ?? 0) + 1)
     if (this.forceCallFromMesherReplayer) {
       this.workers[hash].postMessage({
@@ -938,17 +960,18 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
         y: pos.y,
         z: pos.z,
         value,
+        instancingMode,
         config: this.getMesherConfig(),
       })
     } else {
       this.toWorkerMessagesQueue[hash] ??= []
       this.toWorkerMessagesQueue[hash].push({
-        // this.workers[hash].postMessage({
         type: 'dirty',
         x: pos.x,
         y: pos.y,
         z: pos.z,
         value,
+        instancingMode,
         config: this.getMesherConfig(),
       })
       this.dispatchMessages()

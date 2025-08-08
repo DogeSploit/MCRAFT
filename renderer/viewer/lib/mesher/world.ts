@@ -5,7 +5,7 @@ import { Vec3 } from 'vec3'
 import { WorldBlockProvider } from 'mc-assets/dist/worldBlockProvider'
 import moreBlockDataGeneratedJson from '../moreBlockDataGenerated.json'
 import legacyJson from '../../../../src/preflatMap.json'
-import { defaultMesherConfig, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey } from './shared'
+import { defaultMesherConfig, CustomBlockModels, BlockStateModelInfo, getBlockAssetsCacheKey, MesherConfig } from './shared'
 import { INVISIBLE_BLOCKS } from './worldConstants'
 
 const ignoreAoBlocks = Object.keys(moreBlockDataGeneratedJson.noOcclusions)
@@ -42,12 +42,14 @@ export class World {
   customBlockModels = new Map<string, CustomBlockModels>() // chunkKey -> blockModels
   sentBlockStateModels = new Set<string>()
   blockStateModelInfo = new Map<string, BlockStateModelInfo>()
+  instancedBlocks: number[] = []
+  instancedBlockIds = {} as Record<number, number>
 
-  constructor (version) {
+  constructor (version: string) {
     this.Chunk = Chunks(version) as any
     this.biomeCache = mcData(version).biomes
     this.preflat = !mcData(version).supportFeature('blockStateId')
-    this.config.version = version
+    this.config = { ...defaultMesherConfig, version }
   }
 
   getLight (pos: Vec3, isNeighbor = false, skipMoreChecks = false, curBlockName = '') {
@@ -121,7 +123,6 @@ export class World {
     if (!(pos instanceof Vec3)) pos = new Vec3(...pos as [number, number, number])
     const key = columnKey(Math.floor(pos.x / 16) * 16, Math.floor(pos.z / 16) * 16)
     const blockPosKey = `${pos.x},${pos.y},${pos.z}`
-    const modelOverride = this.customBlockModels.get(key)?.[blockPosKey]
 
     const column = this.columns[key]
     // null column means chunk not loaded
@@ -131,6 +132,7 @@ export class World {
     const locInChunk = posInChunk(loc)
     const stateId = column.getBlockStateId(locInChunk)
 
+    const modelOverride = stateId ? this.customBlockModels.get(key)?.[blockPosKey] : undefined
     const cacheKey = getBlockAssetsCacheKey(stateId, modelOverride)
 
     if (!this.blockCache[cacheKey]) {

@@ -1,5 +1,12 @@
 import { BlockType } from '../../../playground/shared'
 
+export enum InstancingMode {
+  None = 'none',
+  ColorOnly = 'color_only',
+  BlockInstancing = 'block_instancing',
+  BlockInstancingOnly = 'block_instancing_only'
+}
+
 // only here for easier testing
 export const defaultMesherConfig = {
   version: '',
@@ -12,7 +19,7 @@ export const defaultMesherConfig = {
   // textureSize: 1024, // for testing
   debugModelVariant: undefined as undefined | number[],
   clipWorldBelowY: undefined as undefined | number,
-  disableSignsMapsSupport: false
+  disableSignsMapsSupport: false,
 }
 
 export type CustomBlockModels = {
@@ -20,6 +27,19 @@ export type CustomBlockModels = {
 }
 
 export type MesherConfig = typeof defaultMesherConfig
+
+export interface InstancedBlockEntry {
+  stateId: number
+  blockName: string
+  positions: Array<{ x: number, y: number, z: number }>
+  matrices: number[][] // Pre-calculated transformation matrices from worker
+}
+
+export type InstancingMesherData = {
+  blocks: {
+    [stateId: number]: number // instance id
+  }
+}
 
 export type MesherGeometryOutput = {
   sx: number,
@@ -45,6 +65,8 @@ export type MesherGeometryOutput = {
   hadErrors: boolean
   blocksCount: number
   customBlockModels?: CustomBlockModels
+  // New instanced blocks data
+  instancedBlocks: Record<string, InstancedBlockEntry>
 }
 
 export interface MesherMainEvents {
