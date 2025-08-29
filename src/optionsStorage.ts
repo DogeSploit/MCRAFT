@@ -24,7 +24,7 @@ const defaultOptions = {
   chatOpacity: isDev ? 50 : 0, // show chat in dev
   chatOpacityOpened: 100,
   messagesLimit: 200,
-  volume: 100,
+  volume: 30,
   enableMusic: true,
   // fov: 70,
   fov: 75,
@@ -204,6 +204,9 @@ export const getChangedSettings = () => {
 }
 
 migrateOptionsLocalStorage()
+// Force default volume on load (remove this line if you want to remember user's volume preference)
+delete appStorage.changedSettings.volume
+
 export const options: AppOptions = proxy({
   ...defaultOptions,
   ...initialAppConfig.defaultSettings,

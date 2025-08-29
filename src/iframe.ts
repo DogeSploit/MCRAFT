@@ -116,20 +116,16 @@ export function setupIframeComms () {
 
   // Handle volume control from parent app
   customEvents.on('kradle:setVolume', (data) => {
-    console.log('[iframe-rpc] Volume control received from parent', data)
     if (typeof data.volume === 'number') {
       const clampedVolume = Math.max(0, Math.min(100, data.volume))
       options.volume = clampedVolume
-      console.log(`[audio] Volume set to ${clampedVolume}%`)
     }
   })
 
   // Handle music toggle from parent app
   customEvents.on('kradle:setMusic', (data) => {
-    console.log('[iframe-rpc] Music toggle received from parent', data)
     if (typeof data.enabled === 'boolean') {
       options.enableMusic = data.enabled
-      console.log(`[audio] Music ${data.enabled ? 'enabled' : 'disabled'}`)
 
       if (data.enabled) {
         // If music is being turned on, try to start it
