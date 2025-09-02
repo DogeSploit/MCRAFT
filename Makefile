@@ -12,7 +12,9 @@ docker/login:
 	gcloud auth configure-docker ${REGION}-docker.pkg.dev
 
 docker/build:
+	docker buildx create --platform linux/amd64,linux/arm64 --use --bootstrap --name slow-builder --driver docker-container --buildkitd-config ./buildkitd.toml
 	docker buildx build --platform linux/amd64,linux/arm64 . -f Dockerfile --load -t ${IMAGE_TAG}
+	docker buildx rm slow-builder
 
 docker/push:
 	docker push ${IMAGE_TAG}
