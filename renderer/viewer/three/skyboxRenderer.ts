@@ -13,6 +13,10 @@ export class SkyboxRenderer {
   private partialTicks = 0
   private viewDistance = 4
   private temperature = DEFAULT_TEMPERATURE
+  private inWater = false
+  private waterBreathing = false
+  private fogBrightness = 0
+  private prevFogBrightness = 0
 
   constructor (private readonly scene: THREE.Scene, public initialImage: string | null) {
     if (!initialImage) {
@@ -105,6 +109,13 @@ export class SkyboxRenderer {
   // Update temperature (for biome support)
   updateTemperature (temperature: number) {
     this.temperature = temperature
+    this.updateSkyColors()
+  }
+
+  // Update water state
+  updateWaterState (inWater: boolean, waterBreathing: boolean) {
+    this.inWater = inWater
+    this.waterBreathing = waterBreathing
     this.updateSkyColors()
   }
 
@@ -268,6 +279,26 @@ export class SkyboxRenderer {
   private updateSkyColors () {
     if (!this.skyMesh || !this.voidMesh) return
 
+    // Update fog brightness with smooth transition
+    this.prevFogBrightness = this.fogBrightness
+    const renderDistance = this.viewDistance / 32
+    const brightnessAtPosition = 1 // Could be affected by light level in future
+    const targetBrightness = brightnessAtPosition * (1 - renderDistance) + renderDistance
+    this.fogBrightness += (targetBrightness - this.fogBrightness) * 0.1
+
+    // Handle water fog
+    if (this.inWater) {
+      const waterViewDistance = this.waterBreathing ? 100 : 5
+      this.scene.fog = new THREE.Fog(new THREE.Color(0, 0, 1), 0.0025, waterViewDistance)
+      this.scene.background = new THREE.Color(0, 0, 1)
+
+      // Update sky and void colors for underwater effect
+      ;(this.skyMesh.material as THREE.MeshBasicMaterial).color.set(new THREE.Color(0, 0, 1))
+      ;(this.voidMesh.material as THREE.MeshBasicMaterial).color.set(new THREE.Color(0, 0, 0.6))
+      return
+    }
+
+    // Normal sky colors
     const viewDistance = this.viewDistance * 16
     const viewFactor = 1 - (0.25 + 0.75 * this.viewDistance / 32) ** 0.25
 
@@ -278,9 +309,12 @@ export class SkyboxRenderer {
     const brightness = Math.cos(angle * Math.PI * 2) * 2 + 0.5
     const clampedBrightness = Math.max(0, Math.min(1, brightness))
 
-    const red = (fogColor.x + (skyColor.x - fogColor.x) * viewFactor) * clampedBrightness
-    const green = (fogColor.y + (skyColor.y - fogColor.y) * viewFactor) * clampedBrightness
-    const blue = (fogColor.z + (skyColor.z - fogColor.z) * viewFactor) * clampedBrightness
+    // Interpolate fog brightness
+    const interpolatedBrightness = this.prevFogBrightness + (this.fogBrightness - this.prevFogBrightness) * this.partialTicks
+
+    const red = (fogColor.x + (skyColor.x - fogColor.x) * viewFactor) * clampedBrightness * interpolatedBrightness
+    const green = (fogColor.y + (skyColor.y - fogColor.y) * viewFactor) * clampedBrightness * interpolatedBrightness
+    const blue = (fogColor.z + (skyColor.z - fogColor.z) * viewFactor) * clampedBrightness * interpolatedBrightness
 
     this.scene.background = new THREE.Color(red, green, blue)
     this.scene.fog = new THREE.Fog(new THREE.Color(red, green, blue), 0.0025, viewDistance * 2)

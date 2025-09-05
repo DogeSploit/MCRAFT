@@ -174,7 +174,10 @@ export class WorldRendererThree extends WorldRendererCommon {
   override watchReactivePlayerState () {
     super.watchReactivePlayerState()
     this.onReactivePlayerStateUpdated('inWater', (value) => {
-      this.scene.fog = value ? new THREE.Fog(0x00_00_ff, 0.1, this.playerStateReactive.waterBreathing ? 100 : 20) : null
+      this.skyboxRenderer.updateWaterState(value, this.playerStateReactive.waterBreathing)
+    })
+    this.onReactivePlayerStateUpdated('waterBreathing', (value) => {
+      this.skyboxRenderer.updateWaterState(this.playerStateReactive.inWater, value)
     })
     this.onReactivePlayerStateUpdated('ambientLight', (value) => {
       if (!value) return
