@@ -19,7 +19,7 @@ export const getWebsocketStream = async (host: string) => {
   const hostClean = host.replace('ws://', '').replace('wss://', '')
   const hostURL = new URL(`${baseProtocol}://${hostClean}`)
   const hostParams = hostURL.searchParams
-  hostParams.append("client_mcraft", "")
+  hostParams.append('client_mcraft', '')
   const ws = new WebSocket(`${baseProtocol}://${hostURL.host}${hostURL.pathname}?${hostParams.toString()}`)
   const clientDuplex = new CustomDuplex(undefined, data => {
     ws.send(data)
