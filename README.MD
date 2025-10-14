@@ -74,7 +74,7 @@ Whatever offline mode you used (zip, folder, just singleplayer), you can always 
 
 You can play almost on any Java server, vanilla servers are fully supported.
 See the [Mineflayer](https://github.com/PrismarineJS/mineflayer) repo for the list of supported versions (should support majority of versions).
-There is a built-in proxy, but you can also host your one! Just clone the repo, run `pnpm i` (see CONTRIBUTING.MD) and run `pnpm prod-start`, then you can specify `http://localhost:8080` in the proxy field. You can also deploy it to a cloud service:
+There is a built-in proxy, but you can also host your own! Just clone the repo, run `pnpm i` (see CONTRIBUTING.MD) and run `pnpm prod-start`, then you can specify `http://localhost:8080` in the proxy field. You can also deploy it to a cloud service:
 
 [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=minecraft-web-client&type=git&repository=zardoy%2Fminecraft-web-client&branch=next&builder=dockerfile&env%5B%5D=&ports=8080%3Bhttp%3B%2F)
 
