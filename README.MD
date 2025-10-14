@@ -219,7 +219,7 @@ Only during development:
 
 ### Notable Things that Power this Project
 
-- [Mineflayer](https://github.com/PrismarineJS/mineflayer) - Handles all client-side communications with the server (including the builtin one)
+- [Mineflayer](https://github.com/PrismarineJS/mineflayer) - Handles all client-side communications with the server (including the built-in one)
 - [Forked Flying Squid (Space Squid)](https://github.com/zardoy/space-squid) - The builtin offline server that makes single player & P2P possible!
 - [Prismarine Provider Anvil](https://github.com/PrismarineJS/prismarine-provider-anvil) - Handles world loading (region format)
 - [Prismarine Physics](https://github.com/PrismarineJS/prismarine-physics) - Does all the physics calculations
