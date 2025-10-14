@@ -4,15 +4,15 @@
 
 Minecraft **clone** written in TypeScript using the best modern web technologies. Minecraft vanilla-compatible client and integrated server packaged into a single web app.
 
-You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg), [mcon.vercel.app](https://mcon.vercel.app/), or the GitHub pages deploy. Every commit from the default (`next`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - it's usually newer, but might be less stable.
+You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg), [mcon.vercel.app](https://mcon.vercel.app/), or the GitHub Pages deployment. Every commit from the default (`next`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - it's usually newer, but might be less stable.
 
-> In Turkey/Russia, use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
+> In Turkey or Russia, use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
 
 Don't confuse this with [Eaglercraft](https://eagsrc.webmc.xyz) which is a REAL vanilla Minecraft Java Edition port to the web (but with its own limitations). Eaglercraft is a fully playable solution, meanwhile this project is aimed for *device-compatibility* and better performance so it feels portable, flexible and lightweight. It's also a very strong example on how to build true HTML games for the web at scale entirely with the JS ecosystem. Have fun!
 
 For building the project yourself / contributing, see [Development, Debugging & Contributing](#development-debugging--contributing). For reference at what and how web technologies / frameworks are used, see [TECH.md](./TECH.md) (also for comparison with Eaglercraft).
 
-> **Note**: You can deploy it on your own server in less than a minute using a one-liner script from the [Minecraft Everywhere repo](https://github.com/zardoy/minecraft-everywhere)
+> **Note**: You can deploy it on your own server in less than a minute using a one-liner script from the [Minecraft Everywhere repo](https://github.com/zardoy/minecraft-everywhere).
 
 ### Big Features
 
@@ -25,12 +25,12 @@ For building the project yourself / contributing, see [Development, Debugging & 
 - First-class touch (mobile) & controller support
 - First-class keybindings configuration
 - Advanced Resource pack support: Custom GUI, all textures. Server resource packs are supported with proper CORS configuration.
-- Builtin JEI with recipes & descriptions for almost every item (JEI is creative inventory replacement)
+- Built-in JEI with recipes & descriptions for almost every item (JEI is creative inventory replacement)
 - Custom protocol channel extensions (eg for custom block models in the world)
 - Play with friends over internet! (P2P is powered by Peer.js discovery servers)
 - ~~Google Drive support for reading / saving worlds back to the cloud~~
 - Support for custom rendering 3D engines. Modular architecture.
-- even even more!
+- and even more!
 
 All components that are in [Storybook](https://minimap.mcraft.fun/storybook/) are published as npm module and can be used in other projects: [`minecraft-react`](https://npmjs.com/minecraft-react)
 
@@ -46,9 +46,9 @@ All components that are in [Storybook](https://minimap.mcraft.fun/storybook/) ar
 
 This project is tested with BrowserStack. Special thanks to [BrowserStack](https://www.browserstack.com/) for providing testing infrastructure!
 
-Howerver, it's known that these browsers have issues:
+However, it's known that these browsers have issues:
 
-**Opera Mini**: Disable *mouse gestures* in browser settings to avoid opening new tab on right click hold
+**Opera Mini**: Disable *mouse gestures* in browser settings to avoid opening a new tab on right-click-and-hold
 
 **Vivaldi**: Disable Controls -> *Raw Input* in game settings if experiencing issues
 
@@ -64,8 +64,8 @@ Versions below 1.13 are not tested currently and may not work correctly.
 
 ### World Loading
 
-Zip files and folders are supported. Just drag and drop them into the browser window. You can open folders in readonly and read-write mode. New chunks may be generated incorrectly for now.
-In case of opening zip files they are stored in your ram entirely, so there is a ~300mb file limit on IOS.
+Zip files and folders are supported. Just drag and drop them into the browser window. You can open folders in read-only and read-write mode. New chunks may be generated incorrectly for now.
+When opening zip files, they are stored in your ram entirely. There is a ~300 MB file limit on iOS.
 Whatever offline mode you used (zip, folder, just single player), you can always export world with the `/export` command typed in the game chat.
 
 ![docs-assets/singleplayer-future-city-1-10-2.jpg](./docs-assets/singleplayer-future-city-1-10-2.jpg)
@@ -74,13 +74,13 @@ Whatever offline mode you used (zip, folder, just single player), you can always
 
 You can play almost on any Java server, vanilla servers are fully supported.
 See the [Mineflayer](https://github.com/PrismarineJS/mineflayer) repo for the list of supported versions (should support majority of versions).
-There is a builtin proxy, but you can also host your one! Just clone the repo, run `pnpm i` (following CONTRIBUTING.MD) and run `pnpm prod-start`, then you can specify `http://localhost:8080` in the proxy field. Or you can deploy it to the cloud service:
+There is a built-in proxy, but you can also host your one! Just clone the repo, run `pnpm i` (following CONTRIBUTING.MD) and run `pnpm prod-start`, then you can specify `http://localhost:8080` in the proxy field. Or you can deploy it to the cloud service:
 
 [![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?name=minecraft-web-client&type=git&repository=zardoy%2Fminecraft-web-client&branch=next&builder=dockerfile&env%5B%5D=&ports=8080%3Bhttp%3B%2F)
 
 > **Note**: If you want to make **your own** Minecraft server accessible to web clients (without our proxies), you can use [mwc-proxy](https://github.com/zardoy/mwc-proxy) - a lightweight JS WebSocket proxy that runs on the same server as your Minecraft server, allowing players to connect directly via `wss://play.example.com`. `?client_mcraft` is added to the URL, so the proxy will know that it's this client.
 
-Proxy servers are used to connect to Minecraft servers which use TCP protocol. When you connect connect to a server with a proxy, websocket connection is created between you (browser client) and the proxy server located in Europe, then the proxy connects to the Minecraft server and sends the data to the client (you) without any packet deserialization to avoid any additional delays. That said all the Minecraft protocol packets are processed by the client, right in your browser.
+Proxy servers are used to connect to Minecraft servers which use TCP protocol. When you connect to a server with a proxy, a websocket connection is created between you (browser client) and the proxy server, then the proxy connects to the Minecraft server and sends the data to the client (you) without any packet deserialization to avoid any additional delays. That said all the Minecraft protocol packets are processed by the client, right in your browser.
 
 ```mermaid
 graph LR
@@ -117,7 +117,7 @@ There are many many settings, that are not exposed in the UI yet. You can find o
 
 ### Console
 
-To open the console, press `F12`, or if you are on mobile, you can type `#dev` in the URL (browser address bar), it wont't reload the page, but you will see a button to open the console. This way you can change advanced settings and see all errors or warnings. Also this way you can access global variables (described below).
+To open the console, press `F12`, or if you are on mobile, you can type `#dev` in the URL (browser address bar), it won't reload the page, but you will see a button to open the console. This way you can change advanced settings and see all errors or warnings. Also this way you can access global variables (described below).
 
 ### Development, Debugging & Contributing
 
@@ -127,8 +127,8 @@ There is world renderer playground ([link](https://mcon.vercel.app/playground/))
 
 However, there are many things that can be done in online production version (like debugging actual source code). Also you can access some global variables in the console and there are a few useful examples:
 
-- If you type `debugToggle`, press enter in console - It will enables all debug messages! Warning: this will start all packets spam.
-Instead I recommend setting `options.debugLogNotFrequentPackets`. Also you can use `debugTopPackets` (with JSON.stringify) to see what packets were received/sent by name
+- If you type `debugToggle`, press Enter in the console — it will enable all debug messages! Warning: this will start packet spam.
+Instead I recommend setting `options.debugLogNotFrequentPackets`. You can also use `debugTopPackets` (with JSON.stringify) to see what packets were received/sent by name
 
 - `bot` - Mineflayer bot instance. See Mineflayer documentation for more.
 - `world` - Three.js world instance, basically does all the rendering (part of renderer backend).
@@ -173,10 +173,10 @@ Server specific:
 - `?ip=<server_address>` - Display connect screen to the server on load with predefined server ip. `:<port>` is optional and can be added to the ip.
 - `?name=<name>` - Set the server name for saving to the server list
 - `?version=<version>` - Set the version for the server
-- `?proxy=<proxy_address>` - Set the proxy server address to use for  the server
+- `?proxy=<proxy_address>` - Set the proxy server address to use for the server
 - `?username=<username>` - Set the username for the server
-- `?lockConnect=true` - Only works then `ip` parameter is set. Disables cancel/save buttons and all inputs in the connect screen already set as parameters. Useful for integrates iframes.
-- `?autoConnect=true` - Only works then `ip` and `version` parameters are set and `allowAutoConnect` is `true` in config.json! Directly connects to the specified server. Useful for integrates iframes.
+- `?lockConnect=true` - Only works when the `ip` parameter is set. Disables cancel/save buttons and all inputs in the connect screen already set as parameters. Useful for integrates iframes.
+- `?autoConnect=true` - Only works when the `ip` and `version` parameters are set and `allowAutoConnect` is `true` in config.json! Directly connects to the specified server. Useful for integrates iframes.
 - `?serversList=<list_or_url>` - `<list_or_url>` can be a list of servers in the format `ip:version,ip` or a url to a json file with the same format (array) or a txt file with line-delimited list of server IPs.
 - `?addPing=<ping>` - Add a latency to both sides of the connection. Useful for testing ping issues. For example `?addPing=100` will add 200ms to your ping.
 
@@ -220,7 +220,7 @@ Only during development:
 ### Notable Things that Power this Project
 
 - [Mineflayer](https://github.com/PrismarineJS/mineflayer) - Handles all client-side communications with the server (including the built-in one)
-- [Forked Flying Squid (Space Squid)](https://github.com/zardoy/space-squid) - The builtin offline server that makes single player & P2P possible!
+- [Forked Flying Squid (Space Squid)](https://github.com/zardoy/space-squid) - The built-in offline server that makes single player & P2P possible!
 - [Prismarine Provider Anvil](https://github.com/PrismarineJS/prismarine-provider-anvil) - Handles world loading (region format)
 - [Prismarine Physics](https://github.com/PrismarineJS/prismarine-physics) - Does all the physics calculations
 - [Minecraft Protocol](https://github.com/PrismarineJS/node-minecraft-protocol) - Makes connections to servers possible
@@ -233,6 +233,6 @@ Only during development:
 
 ### Alternatives
 
-- [ClassiCube](https://github.com/ClassiCube/ClassiCube) - Better C# Rewrite [\[DEMO\]](https://www.classicube.net/server/play/?warned=true)
-- [Eaglercraft](https://eaglercraft.com/) - Real Minecraft in the browser [\[DEMO\]](https://eaglercraft.com/mc/1.8.8-wasm)
-- [js-minecraft](https://github.com/LabyStudio/js-minecraft) - An insanely well done clone from the graphical side that inspired many features here [\[DEMO\]](https://labystudio.github.io/js-minecraft/)
+- [ClassiCube](https://github.com/ClassiCube/ClassiCube) - Better C# rewrite [\[DEMO\]](https://www.classicube.net/server/play/?warned=true)
+- [Eaglercraft](https://webmc.xyz/) - Real Minecraft in the browser [\[DEMO\]](https://webmc.xyz/#/g/03b1c3b3-bd6a-4b17-ba94-eaf9330df3be)
+- [js-minecraft](https://github.com/LabyStudio/js-minecraft) - An insanely well-done clone from the graphical side that inspired many features here [\[DEMO\]](https://labystudio.github.io/js-minecraft/)
