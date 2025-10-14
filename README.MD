@@ -2,17 +2,17 @@
 
 ![banner](./docs-assets/banner.jpg)
 
-Minecraft **clone** rewritten in TypeScript using the best modern web technologies. Minecraft vanilla-compatible client and integrated server packaged into a single web app.
+Minecraft **clone** written in TypeScript using the best modern web technologies. Minecraft vanilla-compatible client and integrated server packaged into a single web app.
 
-You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg) (short link), [mcon.vercel.app](https://mcon.vercel.app/) or the GitHub pages deploy. Every commit from the default (`develop`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - so it's usually newer, but might be less stable.
+You can try this out at [mcraft.fun](https://mcraft.fun/), [pcm.gg](https://pcm.gg), [mcon.vercel.app](https://mcon.vercel.app/), or the GitHub pages deploy. Every commit from the default (`develop`) branch is deployed to [s.mcraft.fun](https://s.mcraft.fun/) and [s.pcm.gg](https://s.pcm.gg/) - it's usually newer, but might be less stable.
 
-> For Turkey/Russia use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
+> In Turkey/Russia, use [ru.mcraft.fun](https://ru.mcraft.fun/) (since Cloudflare is blocked)
 
-Don't confuse with [Eaglercraft](https://git.eaglercraft.rip/eaglercraft/eaglercraft-1.8) which is a REAL vanilla Minecraft Java edition port to the web (but with its own limitations). Eaglercraft is a fully playable solution, meanwhile this project is aimed for *device-compatiiblity* and better performance so it feels portable, flexible and lightweight. It's also a very strong example on how to build true HTML games for the web at scale entirely with the JS ecosystem. Have fun!
+Don't confuse this with [Eaglercraft](https://eagsrc.webmc.xyz) which is a REAL vanilla Minecraft Java Edition port to the web (but with its own limitations). Eaglercraft is a fully playable solution, meanwhile this project is aimed for *device-compatiiblity* and better performance so it feels portable, flexible and lightweight. It's also a very strong example on how to build true HTML games for the web at scale entirely with the JS ecosystem. Have fun!
 
 For building the project yourself / contributing, see [Development, Debugging & Contributing](#development-debugging--contributing). For reference at what and how web technologies / frameworks are used, see [TECH.md](./TECH.md) (also for comparison with Eaglercraft).
 
-> **Note**: You can deploy it on your own server in less than a minute using a one-liner script from [Minecraft Everywhere repo](https://github.com/zardoy/minecraft-everywhere)
+> **Note**: You can deploy it on your own server in less than a minute using a one-liner script from the [Minecraft Everywhere repo](https://github.com/zardoy/minecraft-everywhere)
 
 ### Big Features
 
@@ -48,7 +48,7 @@ This project is tested with BrowserStack. Special thanks to [BrowserStack](https
 
 Howerver, it's known that these browsers have issues:
 
-**Opera Mini**: Disable *mouse gestures* in browsre settings to avoid opening new tab on right click hold
+**Opera Mini**: Disable *mouse gestures* in browser settings to avoid opening new tab on right click hold
 
 **Vivaldi**: Disable Controls -> *Raw Input* in game settings if experiencing issues
 
@@ -151,7 +151,7 @@ You can also drag and drop any .dat or .mca (region files) into the browser wind
 
 - `F3` - Toggle debug overlay
 - `F3 + A` - Reload all chunks (these that are loaded from the server)
-<!-- <!-- - `F3 + N` - Restart local server (basically resets the world!) -->
+<!-- - `F3 + N` - Restart local server (basically resets the world!) -->
 - `F3 + G` - Toggle chunk sections (geometries) border visibility + entities outline (aka Three.js geometry helpers)
 
 world chunks have a *yellow* border, hostile mobs have a *red* outline, passive mobs have a *green* outline, players have a *blue* outline.
@@ -219,7 +219,7 @@ Only during development:
 
 ### Notable Things that Power this Project
 
-- [Mineflayer](https://github.com/PrismarineJS/mineflayer) - Handles all client-side communications with the server (including the builtin one) - forked
+- [Mineflayer](https://github.com/PrismarineJS/mineflayer) - Handles all client-side communications with the server (including the builtin one)
 - [Forked Flying Squid (Space Squid)](https://github.com/zardoy/space-squid) - The builtin offline server that makes single player & P2P possible!
 - [Prismarine Provider Anvil](https://github.com/PrismarineJS/prismarine-provider-anvil) - Handles world loading (region format)
 - [Prismarine Physics](https://github.com/PrismarineJS/prismarine-physics) - Does all the physics calculations
@@ -233,6 +233,6 @@ Only during development:
 
 ### Alternatives
 
-- [https://github.com/ClassiCube/ClassiCube](ClassiCube - Better C# Rewrite) [DEMO](https://www.classicube.net/server/play/?warned=true)
-- [https://m.eaglercraft.com/](EaglerCraft) - Eaglercraft runnable on mobile (real Minecraft in the browser)
-- [js-minecraft](https://github.com/LabyStudio/js-minecraft) - An insanely well done clone from the graphical side that inspired many features here
+- [ClassiCube](https://github.com/ClassiCube/ClassiCube) - Better C# Rewrite [\[DEMO\]](https://www.classicube.net/server/play/?warned=true)
+- [Eaglercraft](https://eaglercraft.com/) - Real Minecraft in the browser [\[DEMO\]](https://eaglercraft.com/mc/1.8.8-wasm)
+- [js-minecraft](https://github.com/LabyStudio/js-minecraft) - An insanely well done clone from the graphical side that inspired many features here [\[DEMO\]](https://labystudio.github.io/js-minecraft/)
