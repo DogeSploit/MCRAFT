@@ -17,7 +17,9 @@ export default function FollowerClickOverlay() {
     }
 
     customEvents.on('kradle:followPlayer', handler)
-    return () => customEvents.off('kradle:followPlayer', handler)
+    return () => {
+      customEvents.off('kradle:followPlayer', handler)
+    }
   }, [])
 
   useEffect(() => {
