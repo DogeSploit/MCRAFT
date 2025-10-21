@@ -153,7 +153,7 @@ export async function setFollowingPlayer (username?: string) {
           // Player found, continue with follow logic
           console.log(`setFollowingPlayer Player ${username} found after ${retryCount} retries`)
           // Continue with existing follow logic...
-          doFollowPlayer(username);
+          void doFollowPlayer(username)
         } else {
           retryCount++
           setTimeout(retryFollow, 2000)
@@ -164,7 +164,7 @@ export async function setFollowingPlayer (username?: string) {
       return
     }
 
-    doFollowPlayer(username);
+    void doFollowPlayer(username)
   } else {
     // stop following
     console.log(`Following self (main bot)`)
