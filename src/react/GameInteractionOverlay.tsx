@@ -296,7 +296,12 @@ export default function GameInteractionOverlay ({ zIndex }: { zIndex: number }) 
 subscribe(activeModalStack, () => {
   if (activeModalStack.length === 0) {
     if (isInRealGameSession()) {
-      void pointerLock.requestPointerLock()
+      // Don't auto-request pointer lock when running in iframe (Kradle context)
+      // Let the user explicitly click to enter spectator mode instead
+      const isInIframe = window !== window.parent
+      if (!isInIframe) {
+        void pointerLock.requestPointerLock()
+      }
     }
   } else {
     document.exitPointerLock?.()

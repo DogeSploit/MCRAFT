@@ -38,7 +38,7 @@ type IFrameSendablePayload =
     action: 'followingPlayerLost';
   }
 
-type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins'
+type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins' | 'releasePointerLock'
 
 export function setupIframeComms () {
   // Handle incoming messages from kradle frontend
@@ -129,6 +129,13 @@ export function setupIframeComms () {
           window.agentSkinMap.set(agentSkin.username, agentSkin.skinUrl)
         }
       }
+    }
+  })
+
+  // Handle pointer lock release request from parent app
+  customEvents.on('kradle:releasePointerLock', () => {
+    if (document.pointerLockElement) {
+      document.exitPointerLock()
     }
   })
 
