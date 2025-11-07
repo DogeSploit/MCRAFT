@@ -20,7 +20,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The following libraries are used by this project and are subject to the GPL 3.0 License
-- @nxg-org/mineflayer-auto-jump
+Notwithstanding the foregoing, the following libraries, in pnpm-lock.yaml, are used by this project and are subject to the GPL 3.0 License:
 - @nxg-org/mineflayer-trajectories 
 - @nxg-org/mineflayer-util-plugin
