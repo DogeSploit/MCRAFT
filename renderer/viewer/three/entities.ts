@@ -355,7 +355,7 @@ export class Entities {
 
     if (typeof skinUrl !== 'string') throw new Error('Invalid skin url')
     const renderEars = this.worldRenderer.worldRendererConfig.renderEars || username === 'deadmau5'
-    void this.loadAndApplySkin(entityId, skinUrl, renderEars, username).then(() => {
+    void this.loadAndApplySkin(entityId, skinUrl, renderEars).then(() => {
       if (customSkinUrl) return;
 
       if (capeUrl) {
