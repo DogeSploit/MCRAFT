@@ -49,6 +49,35 @@ export default function FollowerClickOverlay () {
   }, [])
 
   useEffect(() => {
+    const handler = async () => {
+      // Go directly into free roam mode - no overlay needed
+      // Switch to first person mode and enable controls
+      void setFollowingPlayer(undefined)
+
+      // Request pointer lock for mouse capture
+      void pointerLock.requestPointerLock()
+
+      // Ensure keyboard focus is on the canvas
+      setTimeout(() => {
+        const canvas = document.getElementById('viewer-canvas') as HTMLCanvasElement
+        if (canvas) {
+          // Canvas elements need tabIndex to be focusable
+          if (!canvas.hasAttribute('tabindex')) {
+            canvas.setAttribute('tabindex', '-1')
+          }
+          canvas.focus()
+        } else {
+          document.documentElement.focus()
+        }
+      }, 50)
+    }
+    customEvents.on('kradle:freeRoamMode', handler)
+    return () => {
+      customEvents.off('kradle:freeRoamMode', handler)
+    }
+  }, [])
+
+  useEffect(() => {
     const handlePointerLockChange = () => {
       const locked = document.pointerLockElement !== null
 
