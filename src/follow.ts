@@ -1,9 +1,9 @@
 import { Vec3 } from 'vec3'
 
 enum CameraMode {
-  FIRST_PERSON = 'firstPerson',    // Bot's eyes view
-  THIRD_PERSON = 'thirdPerson',     // Behind a followed player
-  BIRDS_EYE_VIEW_FOLLOW = 'birdsEyeViewFollow'  // Dynamic overhead view
+  FIRST_PERSON = 'firstPerson', // Bot's eyes view
+  THIRD_PERSON = 'thirdPerson', // Behind a followed player
+  BIRDS_EYE_VIEW_FOLLOW = 'birdsEyeViewFollow' // Dynamic overhead view
 }
 
 let currentCameraMode: CameraMode = CameraMode.FIRST_PERSON
@@ -76,10 +76,10 @@ export function getBirdsEyeCameraPosition () {
   // Get all player entities
   const players: Vec3[] = []
   const playerNames: string[] = []
-  const excludedNames = ['KradleWebViewer', 'watcher']
+  const excludedNames = new Set(['KradleWebViewer', 'watcher'])
 
   // Add the bot itself first (it's also a player) - unless it's one of the excluded
-  if (bot.entity?.position && !excludedNames.includes(bot.username || '')) {
+  if (bot.entity?.position && !excludedNames.has(bot.username || '')) {
     players.push(bot.entity.position)
     playerNames.push(bot.username || 'bot')
   }
@@ -88,7 +88,7 @@ export function getBirdsEyeCameraPosition () {
   for (const entity of Object.values(bot.entities)) {
     if (entity.type === 'player' && entity.position && entity.username) {
       // Skip KradleWebViewer and watcher - they're not real players
-      if (!excludedNames.includes(entity.username)) {
+      if (!excludedNames.has(entity.username)) {
         players.push(entity.position)
         playerNames.push(entity.username)
         // Debug: log actual Y position
@@ -112,7 +112,7 @@ export function getBirdsEyeCameraPosition () {
     return {
       position: new Vec3(bot.entity?.position?.x || 0, fallbackY + 12, (bot.entity?.position?.z || 0) + 12),
       yaw: 0,
-      pitch: -Math.PI / 4  // 45 degrees looking down (negative for down)
+      pitch: -Math.PI / 4 // 45 degrees looking down (negative for down)
     }
   }
 
@@ -134,9 +134,9 @@ export function getBirdsEyeCameraPosition () {
   // Calculate the maximum distance from center to determine height
   let maxDistance = 0
   for (const pos of players) {
-    const distance = Math.sqrt(
-      Math.pow(pos.x - center.x, 2) +
-      Math.pow(pos.z - center.z, 2)
+    const distance = Math.hypot(
+      pos.x - center.x,
+      pos.z - center.z
     )
     if (distance > maxDistance) {
       maxDistance = distance
@@ -161,8 +161,8 @@ export function getBirdsEyeCameraPosition () {
   // Cache this valid position
   const result = {
     position: cameraPosition,
-    yaw: 0,  // Always face north for consistency
-    pitch: -Math.PI / 4  // 45 degrees looking down (negative for down)
+    yaw: 0, // Always face north for consistency
+    pitch: -Math.PI / 4 // 45 degrees looking down (negative for down)
   }
 
   lastValidBirdsEyePosition = result
@@ -305,7 +305,7 @@ export function setBirdsEyeFollowMode () {
   controMax.enabled = false
 
   // Clear the following player since we're not following a specific entity
-  window.following = bot  // Keep bot as default but camera won't use it
+  window.following = bot // Keep bot as default but camera won't use it
 
   // Initial camera positioning
   const { position, yaw, pitch } = getBirdsEyeCameraPosition()

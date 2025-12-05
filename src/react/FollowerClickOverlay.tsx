@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
+import { Vec3 } from 'vec3'
 import { setFollowingPlayer, setBirdsEyeFollowMode, getBirdsEyeCameraPosition, getThirdPersonCameraPosition } from '../follow'
 import { pointerLock } from '../utils'
-import { Vec3 } from 'vec3'
 
 export default function FollowerClickOverlay () {
   const [selectedParticipant, setSelectedParticipant] = useState<string | undefined>(undefined)
@@ -182,7 +182,7 @@ export default function FollowerClickOverlay () {
       }}
     >
       <div style={{ textAlign: 'center', color: 'white', pointerEvents: 'none', fontSize: 10 }}>
-        <div>{selectedParticipant === 'birdsEyeViewFollow' ? "You are in bird's eye view mode" : `You are following ${selectedParticipant}`}</div>
+        <div>{selectedParticipant === 'birdsEyeViewFollow' ? 'You are in bird\'s eye view mode' : `You are following ${selectedParticipant}`}</div>
         <div>Click to enter spectator mode and control camera</div>
       </div>
     </div>
