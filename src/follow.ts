@@ -1,5 +1,13 @@
 import { Vec3 } from 'vec3'
 
+// Spectator camera position - independent from bot position
+export let spectatorCameraPosition: Vec3 | null = null
+
+// Set spectator camera position
+export function setSpectatorCameraPosition(pos: Vec3 | null) {
+  spectatorCameraPosition = pos ? pos.clone() : null
+}
+
 enum CameraMode {
   FIRST_PERSON = 'firstPerson', // Bot's eyes view
   THIRD_PERSON = 'thirdPerson', // Behind a followed player
@@ -16,6 +24,13 @@ function handleMovement () {
   }
 
   appViewer.lastCamUpdate = Date.now()
+
+  // Handle spectator mode with independent camera
+  if (spectatorCameraPosition && following === bot && currentCameraMode === CameraMode.FIRST_PERSON) {
+    // Camera position is independent from bot, just update worldView for chunk loading
+    void appViewer.worldView?.updatePosition(spectatorCameraPosition)
+    return // Skip normal camera updates
+  }
 
   // Handle birds eye follow mode
   if (currentCameraMode === CameraMode.BIRDS_EYE_VIEW_FOLLOW) {
@@ -57,8 +72,7 @@ export function getThirdPersonCameraPosition () {
   // const dz = -distance
 
   const cameraPosition = targetPosition.offset(dx, heightOffset, dz)
-  const cameraYaw = yaw // Option 1: Use the entity's yaw
-  // const cameraYaw = Math.PI // Option 2: Always look straight towards positive z axis
+  const cameraYaw = yaw // Use the entity's yaw - camera looks same direction as player
   const cameraPitch = -0.2 // always look slightly down at 20%
 
   return {
@@ -91,23 +105,17 @@ export function getBirdsEyeCameraPosition () {
       if (!excludedNames.has(entity.username)) {
         players.push(entity.position)
         playerNames.push(entity.username)
-        // Debug: log actual Y position
-        console.log(`[BirdsEye] Player ${entity.username} Y position: ${entity.position.y}`)
       }
     }
   }
 
-  console.log(`[BirdsEye] Found ${players.length} real players (excluding watcher/viewer):`, playerNames)
-
   if (players.length === 0) {
     // Return last valid position if we have one
     if (lastValidBirdsEyePosition) {
-      console.log('[BirdsEye] No players found, using cached position')
       return lastValidBirdsEyePosition
     }
 
     // Only use fallback if we've never had a valid position
-    console.log('[BirdsEye] No players found and no cached position, using default')
     const fallbackY = bot.entity?.position?.y || 70
     return {
       position: new Vec3(bot.entity?.position?.x || 0, fallbackY + 12, (bot.entity?.position?.z || 0) + 12),
@@ -156,8 +164,6 @@ export function getBirdsEyeCameraPosition () {
   const cameraY = center.y + heightAbovePlayers
   const cameraPosition = new Vec3(center.x, cameraY, center.z + cameraOffset)
 
-  console.log('[BirdsEye] Center:', center, 'Height above:', heightAbovePlayers, 'Camera Y:', cameraY, 'Offset:', cameraOffset)
-
   // Cache this valid position
   const result = {
     position: cameraPosition,
@@ -175,8 +181,16 @@ export function setThirdPersonCamera (directionOnly = false) {
 
   // if the bot itself is being followed, just use first person camera normally
   if (following === bot) {
-    const { position, yaw, pitch } = bot.entity
-    appViewer.backend?.updateCamera(directionOnly ? null : position, yaw, pitch)
+    // Check if we're in flying/spectator mode with a separate camera position
+    if (bot.physics.gravity === 0 && spectatorCameraPosition) {
+      // Use spectator camera position instead of bot position
+      const { yaw, pitch } = bot.entity
+      appViewer.backend?.updateCamera(directionOnly ? null : spectatorCameraPosition, yaw, pitch)
+    } else {
+      // Normal first person - use bot position
+      const { position, yaw, pitch } = bot.entity
+      appViewer.backend?.updateCamera(directionOnly ? null : position, yaw, pitch)
+    }
     return
   }
 
@@ -240,8 +254,12 @@ async function doFollowPlayer (username: string) {
   window.following = target
   currentCameraMode = CameraMode.THIRD_PERSON
 
+  // Clear spectator camera position when following another player
+  if (spectatorCameraPosition) {
+    setSpectatorCameraPosition(null)
+  }
+
   // disable keyboard control of bot
-  console.log(`[Follow] Disabling controMax for following player ${username}`)
   controMax.enabled = false
 
   // notify any listeners
@@ -300,8 +318,12 @@ export function setBirdsEyeFollowMode () {
   console.log('Setting birds eye follow mode')
   currentCameraMode = CameraMode.BIRDS_EYE_VIEW_FOLLOW
 
+  // Clear spectator camera position when switching to birds eye mode
+  if (spectatorCameraPosition) {
+    setSpectatorCameraPosition(null)
+  }
+
   // Disable keyboard control since we're in spectator mode
-  console.log('[Follow] Disabling controMax for birds eye follow mode')
   controMax.enabled = false
 
   // Clear the following player since we're not following a specific entity
