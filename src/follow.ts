@@ -47,6 +47,19 @@ function handleMovement () {
 
   // handle losing the entity
   if (following && !following?.entity?.position) {
+    // Try to recover: if the entity exists with the same username, reconnect it
+    if (following?.username) {
+      const recoveredEntity = Object.values(bot.entities).find(
+        e => e.type === 'player' && e.username === following.username
+      )
+      if (recoveredEntity) {
+        // Restore the entity reference - this can happen in MCPR replays where entities get recreated
+        following.entity = recoveredEntity
+        console.log('[Follow] Recovered entity reference for', following.username)
+        return // Continue following
+      }
+    }
+
     // if the following entity cannot be found, switch back to following the bot itself
     console.log('The entity to follow could no longer be found (left/died/too far away/etc.)')
     console.log('Alerting parent app')
