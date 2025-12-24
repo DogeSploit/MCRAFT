@@ -166,9 +166,10 @@ export default () => {
   }, [])
 
   useEffect(() => {
-    minecraftYaw.current = viewDegToMinecraft(following.entity.yaw * -180 / Math.PI)
+    const yaw = following?.entity?.yaw ?? 0
+    minecraftYaw.current = viewDegToMinecraft(yaw * -180 / Math.PI)
     minecraftQuad.current = Math.floor(((minecraftYaw.current + 180) / 90 + 0.5) % 4)
-  }, [following.entity.yaw])
+  }, [following?.entity?.yaw])
 
   if (!showDebug) return null
 
@@ -182,8 +183,8 @@ export default () => {
       <p>Chunk: {Math.floor(pos.x % 16)} ~ {Math.floor(pos.z % 16)} in {Math.floor(pos.x / 16)} ~ {Math.floor(pos.z / 16)}</p>
       <p>Packets: {packetsString}</p>
       <p>Client TPS: {clientTps}</p>
-      <p>Facing (viewer): {following.entity.yaw.toFixed(3)} {following.entity.pitch.toFixed(3)}</p>
-      <p>Facing (minecraft): {quadsDescription[minecraftQuad.current]} ({minecraftYaw.current.toFixed(1)} {(following.entity.pitch * -180 / Math.PI).toFixed(1)})</p>
+      <p>Facing (viewer): {(following?.entity?.yaw ?? 0).toFixed(3)} {(following?.entity?.pitch ?? 0).toFixed(3)}</p>
+      <p>Facing (minecraft): {quadsDescription[minecraftQuad.current]} ({minecraftYaw.current.toFixed(1)} {((following?.entity?.pitch ?? 0) * -180 / Math.PI).toFixed(1)})</p>
       <p>Light: {blockL} ({skyL} sky)</p>
 
       <p>Biome: minecraft:{loadedData.biomesArray[biomeId]?.name ?? 'unknown biome'}</p>

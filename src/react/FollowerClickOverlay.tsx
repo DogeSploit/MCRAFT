@@ -3,6 +3,7 @@ import { Vec3 } from 'vec3'
 import { setFollowingPlayer, setBirdsEyeFollowMode, getBirdsEyeCameraPosition, getThirdPersonCameraPosition, setSpectatorCameraPosition } from '../follow'
 import { pointerLock } from '../utils'
 import { toggleFly } from '../controls'
+import { appQueryParams } from '../appParams'
 
 // Helper function to focus the canvas for keyboard input
 function focusCanvas () {
@@ -22,7 +23,6 @@ export default function FollowerClickOverlay () {
   const [selectedParticipant, setSelectedParticipant] = useState<string | undefined>(undefined)
   const [isHovered, setIsHovered] = useState(false)
   const [showOverlay, setShowOverlay] = useState(false)
-
 
   useEffect(() => {
     const handler = async (data: any) => {
@@ -56,6 +56,9 @@ export default function FollowerClickOverlay () {
 
   useEffect(() => {
     const handler = async () => {
+      // Don't allow free roam mode in playback
+      if (appQueryParams.isPlayback === 'true') return
+
       // Go directly into free roam mode - no overlay needed
 
       // Get current camera position (from birds eye or wherever we are)
@@ -121,6 +124,9 @@ export default function FollowerClickOverlay () {
     e.preventDefault()
     e.stopPropagation()
 
+    // Don't allow taking control in playback mode
+    if (appQueryParams.isPlayback === 'true') return
+
     // Get camera position based on current mode
     let cameraPosition: { position: Vec3; yaw: number; pitch: number; } | null = null
     if (selectedParticipant === 'birdsEyeViewFollow') {
@@ -158,6 +164,26 @@ export default function FollowerClickOverlay () {
     // Ensure keyboard focus is on the game after taking control
     // This prevents spacebar from scrolling the page and ensures keyboard events are captured
     setTimeout(focusCanvas, 100)
+  }
+
+  // Playback mode blocking overlay - prevents all interactions
+  if (appQueryParams.isPlayback === 'true') {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 3000, // Higher than game overlay
+          cursor: 'default',
+          pointerEvents: 'auto', // Capture all events
+        }}
+        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); e.nativeEvent.stopImmediatePropagation?.() }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); e.nativeEvent.stopImmediatePropagation?.() }}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }}
+        onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); e.nativeEvent.stopImmediatePropagation?.() }}
+        onDoubleClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+      />
+    )
   }
 
   if (!selectedParticipant || !showOverlay) return null

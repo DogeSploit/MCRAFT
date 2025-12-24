@@ -53,7 +53,7 @@ subscribeKey(miscUiState, 'gameLoaded', async () => {
           Math.max(Math.min(pitch ?? 1, 2), 0.5)
         )
       }
-      if (getDistance(following.entity.position, position) < 4 * 16) {
+      if (following?.entity?.position && getDistance(following.entity.position, position) < 4 * 16) {
         lastPlayedSounds.lastServerPlayed[soundKey] ??= { count: 0, last: 0 }
         lastPlayedSounds.lastServerPlayed[soundKey].count++
         lastPlayedSounds.lastServerPlayed[soundKey].last = Date.now()
@@ -132,13 +132,13 @@ subscribeKey(miscUiState, 'gameLoaded', async () => {
 
   let lastStepSound = 0
   const movementHappening = async () => {
-    if (!bot.player || !soundMap) return // no info yet
+    if (!bot.player?.entity || !soundMap) return // no info yet
     const VELOCITY_THRESHOLD = 0.1
     const { x, z, y } = bot.player.entity.velocity
     if (following?.entity?.onGround && Math.abs(x) < VELOCITY_THRESHOLD && (Math.abs(z) > VELOCITY_THRESHOLD || Math.abs(y) > VELOCITY_THRESHOLD)) {
       // movement happening
       if (Date.now() - lastStepSound > 300) {
-        const blockUnder = bot.world.getBlock(following.entity.position.offset(0, -1, 0))
+        const blockUnder = following?.entity?.position ? bot.world.getBlock(following.entity.position.offset(0, -1, 0)) : null
         if (blockUnder) {
           const stepSound = soundMap.getStepSound(blockUnder.name)
           if (stepSound) {

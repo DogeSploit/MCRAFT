@@ -137,7 +137,7 @@ const InGameUi = () => {
 
   if (!gameLoaded || !bot || disabledUiParts.includes('*')) return
 
-  if (!adapter) adapter = new DrawerAdapterImpl(following.entity.position)
+  if (!adapter) adapter = new DrawerAdapterImpl(following?.entity?.position ?? bot.entity.position)
 
   return <>
     <RobustPortal to={document.querySelector('#ui-root')}>
