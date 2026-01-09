@@ -2,6 +2,7 @@
 
 import { options } from './optionsStorage'
 import { musicSystem } from './sounds/musicSystem'
+import { reestablishFollowing } from './follow'
 
 type IFrameSendablePayload =
   | {
@@ -93,6 +94,14 @@ export function setupIframeComms () {
     const formattedCommand = `/${command.replace(/^\//, '')}`
     console.log('[packet-monitor] Sending command to bot:', formattedCommand)
     bot.chat(formattedCommand)
+
+    // Check if this is a seek command and re-establish following after a delay
+    if (command.includes('replay view jump to timestamp')) {
+      // Wait a bit for the seek to complete and entities to spawn
+      setTimeout(() => {
+        void reestablishFollowing()
+      }, 1000)
+    }
   })
 
   // Handle reconnect command from parent app
@@ -105,6 +114,11 @@ export function setupIframeComms () {
           detail: window.lastConnectOptions.value,
         })
       )
+
+      // Re-establish following after reconnection
+      setTimeout(() => {
+        void reestablishFollowing()
+      }, 2000) // Wait longer for reconnection to complete
     } else {
       console.error(
         '[iframe-rpc] No connection options available for reconnect'

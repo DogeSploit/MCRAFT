@@ -21,6 +21,9 @@ enum CameraMode {
 
 let currentCameraMode: CameraMode = CameraMode.FIRST_PERSON
 
+// Persistent follow state to survive entity recreation
+let followingUsername: string | null = null
+
 function handleMovement () {
   // Throttle the function to 60 updates per second
   const now = Date.now()
@@ -47,16 +50,21 @@ function handleMovement () {
 
   // handle losing the entity
   if (following && !following?.entity?.position) {
-    // Try to recover: if the entity exists with the same username, reconnect it
-    if (following?.username) {
+    // Try to recover using persistent username
+    const usernameToRecover = followingUsername || following?.username
+    if (usernameToRecover) {
       const recoveredEntity = Object.values(bot.entities).find(
-        e => e.type === 'player' && e.username === following.username
+        e => e.type === 'player' && e.username === usernameToRecover
       )
       if (recoveredEntity) {
         // Restore the entity reference - this can happen in MCPR replays where entities get recreated
-        following.entity = recoveredEntity
-        console.log('[Follow] Recovered entity reference for', following.username)
-        return // Continue following
+        const recoveredPlayer = bot.players[usernameToRecover]
+        if (recoveredPlayer) {
+          recoveredPlayer.entity = recoveredEntity
+          window.following = recoveredPlayer
+          console.log('[Follow] Recovered entity reference for', usernameToRecover)
+          return // Continue following
+        }
       }
     }
 
@@ -221,6 +229,22 @@ export function setThirdPersonCamera (directionOnly = false) {
   appViewer.backend?.updateCamera(directionOnly ? null : position, yaw, pitch)
 }
 
+// Check if a spawned/updated entity is the one we're following
+function checkEntityForFollowRecovery (entity: any) {
+  if (!followingUsername || following === bot) return
+
+  // Check if this entity matches our followed player
+  if (entity.type === 'player' && entity.username === followingUsername) {
+    const player = bot.players[followingUsername]
+    if (player && (!player.entity || player.entity !== entity)) {
+      // Update the entity reference
+      player.entity = entity
+      window.following = player
+      console.log('[Follow] Updated entity reference for', followingUsername, 'after spawn/update')
+    }
+  }
+}
+
 export function trackFollowerMovement () {
   bot.on('move', () => handleMovement())
   bot.on('forcedMove', () => handleMovement())
@@ -228,10 +252,16 @@ export function trackFollowerMovement () {
   // Handle Entity Changes
   bot.on('entityElytraFlew', () => handleMovement())
   bot.on('entityAttributes', () => handleMovement())
-  bot.on('entitySpawn', () => handleMovement())
+  bot.on('entitySpawn', (entity) => {
+    checkEntityForFollowRecovery(entity)
+    handleMovement()
+  })
   bot.on('entityGone', () => handleMovement())
   bot.on('entityMoved', () => handleMovement())
-  bot.on('entityUpdate', () => handleMovement())
+  bot.on('entityUpdate', (entity) => {
+    checkEntityForFollowRecovery(entity)
+    handleMovement()
+  })
 
   handleMovement()
 }
@@ -266,8 +296,9 @@ async function doFollowPlayer (username: string) {
     console.error(`Failed to follow player '${username}' - could not find entity position`)
     return
   }
-  // set the following player
+  // set the following player and store username persistently
   window.following = target
+  followingUsername = username
   currentCameraMode = CameraMode.THIRD_PERSON
 
   // Clear spectator camera position when following another player
@@ -319,6 +350,7 @@ export async function setFollowingPlayer (username?: string) {
 
     // set the following player to the main bot
     window.following = bot
+    followingUsername = null
     currentCameraMode = CameraMode.FIRST_PERSON
 
     // enable keyboard control of bot
@@ -344,6 +376,7 @@ export function setBirdsEyeFollowMode () {
 
   // Clear the following player since we're not following a specific entity
   window.following = bot // Keep bot as default but camera won't use it
+  followingUsername = null // Clear persistent username
 
   // Initial camera positioning
   const { position, yaw, pitch } = getBirdsEyeCameraPosition()
@@ -357,4 +390,42 @@ export function setBirdsEyeFollowMode () {
 // Get current camera mode (useful for debugging)
 export function getCurrentCameraMode () {
   return currentCameraMode
+}
+
+// Get current following username (useful for recovery)
+export function getFollowingUsername () {
+  return followingUsername
+}
+
+// Re-establish following after reconnection/seek
+export async function reestablishFollowing () {
+  if (!followingUsername || currentCameraMode !== CameraMode.THIRD_PERSON) {
+    return
+  }
+
+  console.log('[Follow] Re-establishing follow for', followingUsername)
+
+  // Wait a moment for entities to be loaded
+  await new Promise(resolve => { setTimeout(resolve, 500) })
+
+  // Try to find the player
+  const player = bot.players[followingUsername]
+  if (player) {
+    // Look for the entity
+    const entity = Object.values(bot.entities).find(
+      e => e.type === 'player' && e.username === followingUsername
+    )
+    if (entity) {
+      player.entity = entity
+      window.following = player
+      console.log('[Follow] Successfully re-established following for', followingUsername)
+    } else {
+      // Entity not loaded yet, will be picked up by spawn event
+      console.log('[Follow] Entity not yet loaded for', followingUsername, ', waiting for spawn')
+    }
+  } else {
+    console.log('[Follow] Player not found for', followingUsername, ', clearing follow state')
+    followingUsername = null
+    customEvents.emit('followingPlayerLost')
+  }
 }
