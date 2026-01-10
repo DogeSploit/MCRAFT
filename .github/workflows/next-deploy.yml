@@ -9,6 +9,7 @@ on:
     branches:
       - next
 jobs:
+- run: touch dist/playground/.nojekyll
   deploy:
     runs-on: ubuntu-latest
     permissions:
