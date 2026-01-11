@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Manual Deploy
 on:
   push:
     branches:
@@ -10,20 +10,20 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
         with:
-          version: 9
+          ref: Main
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install Dependencies
-        run: pnpm install --frozen-lockfile false
-      - name: Build
-        run: pnpm build
-      - name: Deploy to GitHub
-        uses: JamesIves/github-pages-deploy-action@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm build
+      - uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
           branch: gh-pages
+          clean: true
