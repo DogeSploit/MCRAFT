@@ -759,8 +759,14 @@ export class Entities {
 
     // check if entity has armor
     if (entity.equipment) {
-      this.addItemModel(e, 'left', entity.equipment[0])
-      this.addItemModel(e, 'right', entity.equipment[1])
+      // Players use arm bones, other entities use bone_*item
+      if (entity.type === 'player') {
+        this.addPlayerHeldItem(e, 'right', entity.equipment[0])
+        this.addPlayerHeldItem(e, 'left', entity.equipment[1])
+      } else {
+        this.addItemModel(e, 'left', entity.equipment[0])
+        this.addItemModel(e, 'right', entity.equipment[1])
+      }
       addArmorModel(this.worldRenderer, e, 'feet', entity.equipment[2])
       addArmorModel(this.worldRenderer, e, 'legs', entity.equipment[3], 2)
       addArmorModel(this.worldRenderer, e, 'chest', entity.equipment[4])
@@ -1074,6 +1080,82 @@ export class Entities {
       texture.needsUpdate = true
     }
     return texture
+  }
+
+  updateEntityEquipment(entityId: string | number) {
+    const entityMesh = this.entities[entityId]
+    if (!entityMesh) return
+
+    const entity = bot?.entities?.[entityId]
+    if (!entity || !entity.equipment) return
+
+    // Players use arm bones, other entities use bone_*item
+    if (entity.type === 'player') {
+      this.addPlayerHeldItem(entityMesh, 'right', entity.equipment[0])
+      this.addPlayerHeldItem(entityMesh, 'left', entity.equipment[1])
+    } else {
+      this.addItemModel(entityMesh, 'left', entity.equipment[0])
+      this.addItemModel(entityMesh, 'right', entity.equipment[1])
+    }
+
+    // Update armor
+    addArmorModel(this.worldRenderer, entityMesh, 'feet', entity.equipment[2])
+    addArmorModel(this.worldRenderer, entityMesh, 'legs', entity.equipment[3], 2)
+    addArmorModel(this.worldRenderer, entityMesh, 'chest', entity.equipment[4])
+    addArmorModel(this.worldRenderer, entityMesh, 'head', entity.equipment[5])
+
+    // Handle elytra vs cape for players
+    if (entity.type === 'player' && entityMesh.playerObject) {
+      entityMesh.playerObject.backEquipment = entity.equipment.some(item => item?.name === 'elytra') ? 'elytra' : 'cape'
+      if (entityMesh.playerObject.cape.map === null) {
+        entityMesh.playerObject.cape.visible = false
+      }
+    }
+  }
+
+  addPlayerHeldItem(entityMesh: SceneEntity, hand: 'left' | 'right', item: Item) {
+    const armName = `${hand}Arm`
+
+    // remove existing held item from arm (only remove items we've added, marked with isHeldItem)
+    entityMesh.traverse(c => {
+      if (c.parent?.name === armName && c.userData?.isHeldItem) {
+        c.removeFromParent()
+        if (c['additionalCleanup']) c['additionalCleanup']()
+      }
+    })
+    if (!item) return
+
+    const itemObject = this.getItemMesh(item, {
+      'minecraft:display_context': 'thirdperson',
+    })
+    if (itemObject?.mesh) {
+      entityMesh.traverse(c => {
+        if (c.name === armName) {
+          const group = new THREE.Object3D()
+          group.userData.isHeldItem = true  // Mark this as a held item so we can remove it later
+          group['additionalCleanup'] = () => {
+            itemObject.itemsTexture?.dispose()
+            itemObject.itemsTextureFlipped?.dispose()
+          }
+          const itemMesh = itemObject.mesh
+
+          // Position item at hand (player arms are 12 units, move down by 10 to hand position)
+          // Adjust Z to center the handle in the hand grip
+          group.position.set(0, -10, 5)
+
+          group.rotation.z = -Math.PI / 16
+          if (itemObject.isBlock) {
+            group.rotation.y = Math.PI / 4 + Math.PI  // Flip 180 degrees
+          } else {
+            itemMesh.rotation.z = -Math.PI / 4
+            group.rotation.y = Math.PI / 2 + Math.PI  // Flip 180 degrees
+            group.scale.multiplyScalar(2)
+          }
+          group.add(itemMesh)
+          c.add(group)
+        }
+      })
+    }
   }
 
   addItemModel (entityMesh: SceneEntity, hand: 'left' | 'right', item: Item) {

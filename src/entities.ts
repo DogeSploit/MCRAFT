@@ -76,7 +76,10 @@ customEvents.on('gameLoaded', () => {
 
   bot.on('entitySpawn', entityData)
   bot.on('entityUpdate', entityData)
-  bot.on('entityEquip', entityData)
+  bot.on('entityEquip', (entity) => {
+    entityData(entity)
+    getThreeJsRendererMethods()?.updateEntityEquipment(entity.id)
+  })
 
   // Texture override from packet properties
   bot._client.on('player_info', (packet) => {
