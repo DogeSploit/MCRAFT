@@ -17,6 +17,7 @@ const getBackendMethods = (worldRenderer: WorldRendererThree) => {
     updateCustomBlock: worldRenderer.updateCustomBlock.bind(worldRenderer),
     getBlockInfo: worldRenderer.getBlockInfo.bind(worldRenderer),
     playEntityAnimation: worldRenderer.entities.playAnimation.bind(worldRenderer.entities),
+    getPlayerObject: worldRenderer.entities.getPlayerObject.bind(worldRenderer.entities),
     damageEntity: worldRenderer.entities.handleDamageEvent.bind(worldRenderer.entities),
     updatePlayerSkin: worldRenderer.entities.updatePlayerSkin.bind(worldRenderer.entities),
     updateEntityEquipment: worldRenderer.entities.updateEntityEquipment.bind(worldRenderer.entities),

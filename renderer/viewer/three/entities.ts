@@ -296,8 +296,8 @@ export class Entities {
       const entity = this.entities[entityId]
       const playerObject = entity.playerObject as PlayerObjectType | undefined
 
-      // Update animations
-      if (playerObject?.animation) {
+      // Update animations (skip if paused)
+      if (playerObject?.animation && !playerObject.animation.paused) {
         playerObject.animation.update(playerObject, dt)
       }
 

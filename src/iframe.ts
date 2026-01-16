@@ -1,5 +1,6 @@
 // Setup iframe comms with kradle frontend
 
+import { getThreeJsRendererMethods } from 'renderer/viewer/three/threeJsMethods'
 import { options } from './optionsStorage'
 import { musicSystem } from './sounds/musicSystem'
 import { reestablishFollowing } from './follow'
@@ -102,6 +103,45 @@ export function setupIframeComms () {
         void reestablishFollowing()
       }, 1000)
     }
+
+    if (command === 'replay view pause') {
+      // Pause all player animations when replay is paused
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = true
+          }
+        }
+      })()
+    }
+
+    if (command === 'replay view unpause' || command === 'replay view resume' || command === 'replay view play') {
+      // Resume all player animations when replay is resumed
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = false
+          }
+        }
+      })()
+    }
+
   })
 
   // Handle reconnect command from parent app
