@@ -42,6 +42,65 @@ type IFrameSendablePayload =
 
 type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins' | 'releasePointerLock' | 'birdsEyeViewFollow'
 
+
+
+export function registerPauseHotkey () {
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.repeat) return
+
+    e.preventDefault()
+
+    // "1" key (top row + numpad)
+    if (e.code === 'Digit1') {
+      bot.chat('/replay view pause')
+      // Pause all player animations when replay is paused
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = true
+          }
+        }
+      })()
+    }
+
+    if (e.code === 'Digit2') {
+      bot.chat('/replay view unpause')
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = false
+          }
+        }
+      })()
+    }
+  }
+
+  window.addEventListener('keydown', onKeyDown)
+
+  // return cleanup/unregister function
+  return () => {
+    window.removeEventListener('keydown', onKeyDown)
+  }
+}
+
+registerPauseHotkey()
+
 export function setupIframeComms () {
   // Handle incoming messages from kradle frontend
   window.addEventListener('message', (event) => {
@@ -103,6 +162,8 @@ export function setupIframeComms () {
         void reestablishFollowing()
       }, 1000)
     }
+
+    console.log('[packet-monitor] Command received:', command)
 
     if (command === 'replay view pause') {
       // Pause all player animations when replay is paused

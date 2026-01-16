@@ -987,6 +987,220 @@ window.addEventListener('keydown', (e) => {
   miscUiState.showUI = !miscUiState.showUI
 })
 
+// #region Canvas Recording
+const recordingState: {
+  mediaRecorder: MediaRecorder | null
+  chunks: Blob[]
+  holdTimeout: ReturnType<typeof setTimeout> | null
+  isRecording: boolean
+  startTime: number
+  timerInterval: ReturnType<typeof setInterval> | null
+  indicatorElement: HTMLDivElement | null
+} = {
+  mediaRecorder: null,
+  chunks: [],
+  holdTimeout: null,
+  isRecording: false,
+  startTime: 0,
+  timerInterval: null,
+  indicatorElement: null
+}
+
+const createRecordingIndicator = () => {
+  const indicator = document.createElement('div')
+  indicator.id = 'recording-indicator'
+  indicator.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 16px;
+    z-index: 10000;
+    pointer-events: none;
+  `
+
+  const redCircle = document.createElement('div')
+  redCircle.style.cssText = `
+    width: 12px;
+    height: 12px;
+    background: red;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  `
+
+  const text = document.createElement('span')
+  text.textContent = 'Recording'
+  text.style.fontWeight = 'bold'
+
+  const time = document.createElement('span')
+  time.id = 'recording-time'
+  time.textContent = '0:00'
+  time.style.marginLeft = '5px'
+
+  indicator.appendChild(redCircle)
+  indicator.appendChild(text)
+  indicator.appendChild(time)
+
+  // Add CSS animation for pulsing effect
+  const style = document.createElement('style')
+  style.textContent = `
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  `
+  document.head.appendChild(style)
+
+  return indicator
+}
+
+const updateRecordingTime = () => {
+  const elapsed = Math.floor((Date.now() - recordingState.startTime) / 1000)
+  const minutes = Math.floor(elapsed / 60)
+  const seconds = elapsed % 60
+  const timeElement = document.getElementById('recording-time')
+  if (timeElement) {
+    timeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+}
+
+const startCanvasRecording = () => {
+  const canvas = document.getElementById('viewer-canvas') as HTMLCanvasElement
+  if (!canvas) {
+    console.warn('Canvas not found for recording')
+    return
+  }
+
+  try {
+    // Capture the canvas stream at 60fps
+    const stream = canvas.captureStream(60)
+
+    // Use high quality settings
+    const options = {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 25_000_000 // 8 Mbps for high quality
+    }
+
+    // Fallback to vp8 if vp9 is not supported
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options.mimeType = 'video/webm;codecs=vp8'
+    }
+
+    const mediaRecorder = new MediaRecorder(stream, options)
+    recordingState.chunks = []
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordingState.chunks.push(event.data)
+      }
+    }
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recordingState.chunks, { type: 'video/webm' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const date = new Date()
+      link.download = `recording ${date.toLocaleString().replaceAll('.', '-').replace(',', '')}.webm`
+      link.click()
+      URL.revokeObjectURL(url)
+      recordingState.mediaRecorder = null
+      recordingState.chunks = []
+    }
+
+    mediaRecorder.start()
+    recordingState.mediaRecorder = mediaRecorder
+    recordingState.isRecording = true
+    recordingState.startTime = Date.now()
+
+    // Create and show indicator
+    recordingState.indicatorElement = createRecordingIndicator()
+    document.body.appendChild(recordingState.indicatorElement)
+
+    // Start timer update
+    recordingState.timerInterval = setInterval(updateRecordingTime, 1000)
+
+    console.log('Canvas recording started')
+  } catch (error) {
+    console.error('Failed to start canvas recording:', error)
+  }
+}
+
+const stopCanvasRecording = () => {
+  if (recordingState.mediaRecorder && recordingState.isRecording) {
+    recordingState.mediaRecorder.stop()
+    recordingState.isRecording = false
+
+    // Clear timer and remove indicator
+    if (recordingState.timerInterval) {
+      clearInterval(recordingState.timerInterval)
+      recordingState.timerInterval = null
+    }
+
+    if (recordingState.indicatorElement) {
+      recordingState.indicatorElement.remove()
+      recordingState.indicatorElement = null
+    }
+
+    console.log('Canvas recording stopped')
+  }
+}
+
+window.addEventListener('mousedown', (e) => {
+  // Only handle left mouse button (button 0)
+  if (e.button !== 0) return
+
+  // Clear any existing timeout
+  if (recordingState.holdTimeout) {
+    clearTimeout(recordingState.holdTimeout)
+  }
+
+  // Set a 2-second timeout to start recording
+  recordingState.holdTimeout = setTimeout(() => {
+    if (!recordingState.isRecording) {
+      startCanvasRecording()
+    }
+    recordingState.holdTimeout = null
+  }, 2000)
+})
+
+window.addEventListener('mouseup', (e) => {
+  // Only handle left mouse button (button 0)
+  if (e.button !== 0) return
+
+  // Clear the timeout if button is released before 2 seconds
+  if (recordingState.holdTimeout) {
+    clearTimeout(recordingState.holdTimeout)
+    recordingState.holdTimeout = null
+  }
+
+  // If recording, stop it
+  if (recordingState.isRecording) {
+    stopCanvasRecording()
+  }
+})
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+  if (recordingState.holdTimeout) {
+    clearTimeout(recordingState.holdTimeout)
+  }
+  if (recordingState.timerInterval) {
+    clearInterval(recordingState.timerInterval)
+  }
+  if (recordingState.isRecording) {
+    stopCanvasRecording()
+  }
+})
+// #endregion
+
 // #region experimental debug things
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyL' && e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
