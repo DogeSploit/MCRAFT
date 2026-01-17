@@ -47,6 +47,8 @@ export type AppQsParams = {
   replayFilter?: string
   replaySpeed?: string
   replayFileUrl?: string
+  mcprUrl?: string // URL to MCPR replay file
+  worldUrl?: string // URL to world archive (zip/tar.gz) to load alongside MCPR
   replayValidateClient?: string
   replayStopOnError?: string
   replaySkipMissingOnTimeout?: string
