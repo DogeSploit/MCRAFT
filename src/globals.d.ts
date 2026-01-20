@@ -41,6 +41,7 @@ declare const customEvents: import('typed-emitter').default<{
   'kradle:birdsEyeViewFollow' (data?: any): void // request from kradle to set mode birdsEyeViewFollow
   'kradle:freeRoamMode' (data?: any): void // request from kradle to set mode freeRoamMode
   agentSkinsUpdated (): void // emitted when agent skins map is updated
+  recordingUpdate (data: any): void // emitted when recording state changes
   connectionStatus (statusData: {
     status: 'connected' | 'connecting' | 'disconnected' | 'error' | 'kicked'
     message: string

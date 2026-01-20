@@ -1,8 +1,10 @@
 // Setup iframe comms with kradle frontend
 
+import { getThreeJsRendererMethods } from 'renderer/viewer/three/threeJsMethods'
 import { options } from './optionsStorage'
 import { musicSystem } from './sounds/musicSystem'
 import { reestablishFollowing } from './follow'
+import { toggleMic, toggleCamera, toggleRecording } from './controls'
 
 type IFrameSendablePayload =
   | {
@@ -21,6 +23,8 @@ type IFrameSendablePayload =
     progress: number; // 0.0 to 1.0
     percentage: number; // 0 to 100
     recordingName?: string; // e.g. "2025-07-04--00-41-17"
+    isRecording: boolean;
+    isPaused: boolean;
   }
   | {
     source: 'minecraft-web-client';
@@ -40,6 +44,68 @@ type IFrameSendablePayload =
   }
 
 type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins' | 'releasePointerLock' | 'birdsEyeViewFollow'
+
+let playerPaused = false
+
+export function registerPauseHotkey () {
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.repeat) return
+
+    // "P" key to toggle pause/unpause
+    if (e.code === 'KeyP' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault()
+
+      if (playerPaused) {
+        // Unpause
+        bot.chat('/replay view unpause')
+        void (async () => {
+          const renderer = getThreeJsRendererMethods()
+          if (!renderer) return
+
+          playerPaused = false
+
+          const playerObjects = await Promise.all(
+            Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+          )
+
+          for (const playerObject of playerObjects) {
+            if (playerObject?.animation) {
+              playerObject.animation.paused = false
+            }
+          }
+        })()
+      } else {
+      // Pause
+        bot.chat('/replay view pause')
+        void (async () => {
+          const renderer = getThreeJsRendererMethods()
+          if (!renderer) return
+
+          playerPaused = true
+
+          const playerObjects = await Promise.all(
+            Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+          )
+
+          for (const playerObject of playerObjects) {
+            if (playerObject?.animation) {
+              playerObject.animation.paused = true
+            }
+          }
+        })()
+      }
+    }
+  }
+
+  window.addEventListener('keydown', onKeyDown)
+
+  // return cleanup/unregister function
+  return () => {
+    window.removeEventListener('keydown', onKeyDown)
+  }
+}
+
+registerPauseHotkey()
 
 export function setupIframeComms () {
   // Handle incoming messages from kradle frontend
@@ -102,6 +168,63 @@ export function setupIframeComms () {
         void reestablishFollowing()
       }, 1000)
     }
+
+    console.log('[packet-monitor] Command received:', command)
+
+    if (command === 'replay view pause') {
+      // Pause all player animations when replay is paused
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        playerPaused = true
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = true
+          }
+        }
+      })()
+    }
+
+    if (command === 'replay view unpause' || command === 'replay view resume' || command === 'replay view play') {
+      // Resume all player animations when replay is resumed
+      void (async () => {
+
+        const renderer = getThreeJsRendererMethods()
+        if (!renderer) return
+
+        playerPaused = false
+
+        const playerObjects = await Promise.all(
+          Object.values(bot.entities).map(entity => renderer.getPlayerObject(entity.id))
+        )
+
+        for (const playerObject of playerObjects) {
+          if (playerObject?.animation) {
+            playerObject.animation.paused = false
+          }
+        }
+      })()
+    }
+
+    if (command === 'replay recording toggle') {
+      void toggleRecording()
+    }
+
+    if (command === 'replay mic toggle') {
+      void toggleMic()
+    }
+
+    if (command === 'replay camera toggle') {
+      void toggleCamera()
+    }
+
   })
 
   // Handle reconnect command from parent app
@@ -183,6 +306,40 @@ export function setupIframeComms () {
     let storedPercentage = 0
     let storedCurrentTime = ''
     let storedRecordingName = ''
+    let storedIsRecording = false
+    let storedIsMicEnabled = false
+    let storedIsCameraEnabled = false
+
+    customEvents.on('recordingUpdate', (data) => {
+      console.log('[packet-monitor] Custom payload received:', data)
+      if (data.isRecording !== undefined) {
+        storedIsRecording = data.isRecording
+      }
+      if (data.isMicEnabled !== undefined) {
+        storedIsMicEnabled = data.isMicEnabled
+      }
+      if (data.isCameraEnabled !== undefined) {
+        storedIsCameraEnabled = data.isCameraEnabled
+      }
+
+      const replayStatus = {
+        currentTime: storedCurrentTime,
+        progress: storedProgress,
+        percentage: storedPercentage,
+        recordingName: storedRecordingName,
+        isPaused: playerPaused,
+        isRecording: storedIsRecording,
+        isMicEnabled: storedIsMicEnabled,
+        isCameraEnabled: storedIsCameraEnabled,
+      }
+
+      if (storedCurrentTime && window !== window.parent) {
+        sendMessageToKradle({
+          action: 'replayStatus',
+          ...replayStatus,
+        })
+      }
+    })
 
     bot._client.on('boss_bar', (data) => {
       // Extract progress percentage (action 2)
@@ -218,7 +375,13 @@ export function setupIframeComms () {
         progress: storedProgress,
         percentage: storedPercentage,
         recordingName: storedRecordingName,
+        isPaused: playerPaused,
+        isRecording: storedIsRecording,
+        isMicEnabled: storedIsMicEnabled,
+        isCameraEnabled: storedIsCameraEnabled,
       }
+
+      console.log('[boss-monitor] Replay status:', replayStatus)
 
       // Only send if data has changed and we have minimum required data
       const statusChanged =

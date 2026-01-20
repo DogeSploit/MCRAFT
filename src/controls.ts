@@ -28,6 +28,7 @@ import { onCameraMove, onControInit } from './cameraRotationControls'
 import { createNotificationProgressReporter } from './core/progressReporter'
 import { appStorage } from './react/appStorageProvider'
 import { switchGameMode } from './packetsReplay/replayPackets'
+import { appQueryParams } from './appParams'
 
 
 export const customKeymaps = proxy(appStorage.keybindings)
@@ -68,7 +69,7 @@ export const contro = new ControMax({
     ui: {
       toggleFullscreen: ['F11'],
       back: [null/* 'Escape' */, 'B'],
-      toggleMap: ['KeyM'],
+      toggleMap: [null], // 'KeyM'
       leftClick: [null, 'A'],
       rightClick: [null, 'Y'],
       speedupCursor: [null, 'Left Stick'],
@@ -986,6 +987,596 @@ window.addEventListener('keydown', (e) => {
   e.preventDefault()
   miscUiState.showUI = !miscUiState.showUI
 })
+
+// #region Canvas Recording
+const RECORDING_WIDTH = 1920
+const RECORDING_HEIGHT = 1080
+const WEBCAM_SIZE = 200
+const WEBCAM_PADDING = 36
+const WEBCAM_BORDER_RADIUS = 16
+
+export const recordingState: {
+  mediaRecorder: MediaRecorder | null
+  chunks: Blob[]
+  holdTimeout: ReturnType<typeof setTimeout> | null
+  isRecording: boolean
+  startTime: number
+  timerInterval: ReturnType<typeof setInterval> | null
+  indicatorElement: HTMLDivElement | null
+  recordingCanvas: HTMLCanvasElement | null
+  recordingCtx: CanvasRenderingContext2D | null
+  animationFrameId: number | null
+  audioContext: AudioContext | null
+  audioDestination: MediaStreamAudioDestinationNode | null
+  micSourceNode: MediaStreamAudioSourceNode | null
+} = {
+  mediaRecorder: null,
+  chunks: [],
+  holdTimeout: null,
+  isRecording: false,
+  startTime: 0,
+  timerInterval: null,
+  indicatorElement: null,
+  recordingCanvas: null,
+  recordingCtx: null,
+  animationFrameId: null,
+  audioContext: null,
+  audioDestination: null,
+  micSourceNode: null
+}
+
+const createRecordingIndicator = () => {
+  const indicator = document.createElement('div')
+  indicator.id = 'recording-indicator'
+  indicator.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 16px;
+    z-index: 10000;
+    pointer-events: none;
+  `
+
+  const redCircle = document.createElement('div')
+  redCircle.style.cssText = `
+    width: 12px;
+    height: 12px;
+    background: red;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  `
+
+  const text = document.createElement('span')
+  text.textContent = 'Recording'
+  text.style.fontWeight = 'bold'
+
+  const time = document.createElement('span')
+  time.id = 'recording-time'
+  time.textContent = '0:00'
+  time.style.marginLeft = '5px'
+
+  indicator.appendChild(redCircle)
+  indicator.appendChild(text)
+  indicator.appendChild(time)
+
+  // Add CSS animation for pulsing effect
+  const style = document.createElement('style')
+  style.textContent = `
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  `
+  document.head.appendChild(style)
+
+  return indicator
+}
+
+let micStream: MediaStream | null = null
+let webcamStream: MediaStream | null = null
+let webcamPreviewElement: HTMLVideoElement | null = null
+
+export const getMicStatus = () => {
+  return micStream?.getAudioTracks().some((t) => t.readyState === 'live') ?? false
+}
+
+export const getCameraStatus = () => {
+  return webcamStream?.getVideoTracks().some((t) => t.readyState === 'live') ?? false
+}
+
+export const getRecordingStatus = () => {
+  return recordingState.isRecording
+}
+
+export const requestMicPermission = async (): Promise<MediaStream | null> => {
+  try {
+    // reuse existing stream if we already have one
+    if (micStream && micStream.getAudioTracks().some((t) => t.readyState === 'live')) {
+      customEvents.emit('recordingUpdate', {
+        isMicEnabled: !!micStream,
+      })
+      return micStream
+    }
+
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: { ideal: 48_000 },
+        channelCount: { ideal: 2 },
+      },
+    })
+
+    customEvents.emit('recordingUpdate', {
+      isMicEnabled: !!micStream,
+    })
+
+    return micStream
+  } catch (err) {
+    console.warn('Mic permission denied or failed', err)
+    micStream = null
+    customEvents.emit('recordingUpdate', {
+      isMicEnabled: false,
+    })
+    return null
+  }
+}
+
+export const requestWebcamPermission = async (): Promise<MediaStream | null> => {
+  try {
+    // reuse existing stream if we already have one
+    if (webcamStream && webcamStream.getVideoTracks().some((t) => t.readyState === 'live')) {
+      customEvents.emit('recordingUpdate', {
+        isCameraEnabled: !!webcamStream,
+      })
+      return webcamStream
+    }
+
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 480 },
+        height: { ideal: 480 },
+        facingMode: 'user',
+      },
+    })
+
+    customEvents.emit('recordingUpdate', {
+      isCameraEnabled: !!webcamStream,
+    })
+
+    return webcamStream
+  } catch (err) {
+    console.warn('Webcam permission denied or failed', err)
+    webcamStream = null
+    customEvents.emit('recordingUpdate', {
+      isCameraEnabled: false,
+    })
+    return null
+  }
+}
+
+const createWebcamPreview = (stream: MediaStream) => {
+  const gameCanvas = document.getElementById('viewer-canvas') as HTMLCanvasElement
+  if (!gameCanvas) return null
+
+  const video = document.createElement('video')
+  video.srcObject = stream
+  video.muted = true
+  video.playsInline = true
+
+  // Get actual canvas displayed dimensions
+  const canvasRect = gameCanvas.getBoundingClientRect()
+  console.log('[recording dims] Canvas rect:', canvasRect.width, canvasRect.height, 'Window:', window.innerWidth, window.innerHeight)
+
+  const scale = canvasRect.width / RECORDING_WIDTH
+  const previewSize = Math.round(WEBCAM_SIZE * scale)
+  const previewPadding = Math.round(WEBCAM_PADDING * scale)
+  const previewBorderRadius = Math.round(WEBCAM_BORDER_RADIUS * scale)
+
+  // Position relative to the canvas element's bottom-right corner
+  const bottomPos = (window.innerHeight - canvasRect.bottom) + previewPadding
+  const rightPos = (window.innerWidth - canvasRect.right) + previewPadding
+
+  console.log('[recording dims] Preview size:', previewSize, 'padding:', previewPadding, 'bottom:', bottomPos, 'right:', rightPos)
+
+  // Style as visible preview in bottom-right corner of the canvas
+  video.style.cssText = `
+    position: fixed;
+    bottom: ${bottomPos}px;
+    right: ${rightPos}px;
+    width: ${previewSize}px;
+    height: ${previewSize}px;
+    object-fit: cover;
+    border-radius: ${previewBorderRadius}px;
+    z-index: 9999;
+    pointer-events: none;
+    transform: scaleX(-1);
+  `
+
+  return video
+}
+
+export const toggleMic = async () => {
+  if (micStream) {
+    // Deactivate mic
+    // Disconnect from audio destination if recording
+    if (recordingState.micSourceNode) {
+      recordingState.micSourceNode.disconnect()
+      recordingState.micSourceNode = null
+    }
+    // eslint-disable-next-line unicorn/no-array-for-each
+    micStream.getTracks()?.forEach((t) => t.stop())
+    micStream = null
+    customEvents.emit('recordingUpdate', {
+      isMicEnabled: false,
+    })
+    console.log('Mic deactivated')
+  } else {
+    // Activate mic
+    await requestMicPermission()
+    // Hot-plug: connect to audio destination if recording is active
+    if (micStream && recordingState.audioContext && recordingState.audioDestination) {
+      recordingState.micSourceNode = recordingState.audioContext.createMediaStreamSource(micStream)
+      recordingState.micSourceNode.connect(recordingState.audioDestination)
+      console.log('Mic connected to recording audio destination')
+    }
+    console.log('Mic activated:', !!micStream)
+  }
+}
+
+export const toggleCamera = async () => {
+  if (webcamStream) {
+    // Deactivate camera
+    // eslint-disable-next-line unicorn/no-array-for-each
+    webcamStream.getTracks()?.forEach((t) => t.stop())
+    webcamStream = null
+    customEvents.emit('recordingUpdate', {
+      isCameraEnabled: false,
+    })
+    if (webcamPreviewElement) {
+      webcamPreviewElement.pause()
+      webcamPreviewElement.srcObject = null
+      webcamPreviewElement.remove()
+      webcamPreviewElement = null
+    }
+    console.log('Camera deactivated')
+  } else {
+    // Activate camera
+    const webcam = await requestWebcamPermission()
+    if (webcam) {
+      webcamPreviewElement = createWebcamPreview(webcam)
+      if (webcamPreviewElement) {
+        document.body.appendChild(webcamPreviewElement)
+        await webcamPreviewElement.play()
+      }
+    }
+    console.log('Camera activated:', !!webcamStream)
+  }
+}
+
+export const toggleRecording = async () => {
+  if (recordingState.isRecording) {
+    stopCanvasRecording()
+  } else {
+    void startCanvasRecording()
+  }
+}
+
+// E key to toggle camera
+if (appQueryParams.isPlayback === 'true') {
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyE' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      // Don't toggle if user is typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      void toggleCamera()
+    }
+  })
+
+  // M key to toggle mic
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyM' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault()
+      // Don't toggle if user is typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      void toggleMic()
+    }
+  })
+
+  // R key to toggle recording
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyR' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      // Don't toggle if user is typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      void toggleRecording()
+    }
+  })
+}
+
+const updateRecordingTime = () => {
+  const elapsed = Math.floor((Date.now() - recordingState.startTime) / 1000)
+  const minutes = Math.floor(elapsed / 60)
+  const seconds = elapsed % 60
+  const timeElement = document.getElementById('recording-time')
+  if (timeElement) {
+    timeElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+}
+
+const drawRoundedRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+// eslint-disable-next-line max-params
+) => {
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + width - radius, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius)
+  ctx.lineTo(x + width, y + height - radius)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height)
+  ctx.lineTo(x + radius, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
+}
+
+const startCanvasRecording = async () => {
+  // Prevent double-starting
+  if (recordingState.isRecording) {
+    console.warn('Recording already in progress')
+    return
+  }
+
+  const gameCanvas = document.getElementById('viewer-canvas') as HTMLCanvasElement
+  if (!gameCanvas) {
+    console.warn('Canvas not found for recording')
+    return
+  }
+
+  try {
+    // Create recording canvas at 1920x1080
+    const recordingCanvas = document.createElement('canvas')
+    recordingCanvas.width = RECORDING_WIDTH
+    recordingCanvas.height = RECORDING_HEIGHT
+    const ctx = recordingCanvas.getContext('2d')
+    if (!ctx) {
+      console.warn('Could not get 2d context for recording canvas')
+      return
+    }
+    recordingState.recordingCanvas = recordingCanvas
+    recordingState.recordingCtx = ctx
+
+    // Compositing loop - draws game canvas and webcam to recording canvas
+    // Uses webcamPreviewElement directly for camera hot-plugging support
+    const drawFrame = () => {
+      if (!recordingState.isRecording) return
+
+      // Draw the game canvas scaled to fill the recording canvas
+      ctx.drawImage(gameCanvas, 0, 0, RECORDING_WIDTH, RECORDING_HEIGHT)
+
+      // Draw webcam if available (square, bottom right, with rounded corners)
+      // Uses webcamPreviewElement directly so camera can be hot-plugged
+      if (webcamPreviewElement && webcamPreviewElement.readyState >= 2) {
+        const webcamX = RECORDING_WIDTH - WEBCAM_SIZE - WEBCAM_PADDING
+        const webcamY = RECORDING_HEIGHT - WEBCAM_SIZE - WEBCAM_PADDING
+
+        // Save context state
+        ctx.save()
+
+        // Create clipping path for rounded corners
+        drawRoundedRect(ctx, webcamX, webcamY, WEBCAM_SIZE, WEBCAM_SIZE, WEBCAM_BORDER_RADIUS)
+        ctx.clip()
+
+        // Flip horizontally for mirror effect
+        ctx.translate(webcamX + WEBCAM_SIZE, webcamY)
+        ctx.scale(-1, 1)
+
+        // Calculate crop to make webcam square (center crop)
+        const { videoWidth, videoHeight } = webcamPreviewElement
+        const minDim = Math.min(videoWidth, videoHeight)
+        const srcX = (videoWidth - minDim) / 2
+        const srcY = (videoHeight - minDim) / 2
+
+        // Draw the webcam video cropped to square (at 0,0 since we translated)
+        ctx.drawImage(
+          webcamPreviewElement,
+          srcX,
+          srcY,
+          minDim,
+          minDim,
+          0,
+          0,
+          WEBCAM_SIZE,
+          WEBCAM_SIZE
+        )
+
+        // Restore context state
+        ctx.restore()
+      }
+
+      recordingState.animationFrameId = requestAnimationFrame(drawFrame)
+    }
+
+    // Start the compositing loop
+    recordingState.isRecording = true
+    customEvents.emit('recordingUpdate', {
+      isRecording: true,
+    })
+    drawFrame()
+
+    // Capture the recording canvas stream at 60fps
+    const recordingStream = recordingCanvas.captureStream(60)
+
+    // Set up AudioContext for mic hot-plugging support
+    // The audio destination provides a constant audio track that we can connect/disconnect mic to
+    // Use high sample rate and playback latency hint for better quality
+    const audioContext = new AudioContext({
+      sampleRate: 48_000,
+      latencyHint: 'playback'
+    })
+
+    // Ensure AudioContext is running (may be suspended on subsequent recordings)
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume()
+    }
+
+    const audioDestination = audioContext.createMediaStreamDestination()
+    recordingState.audioContext = audioContext
+    recordingState.audioDestination = audioDestination
+
+    // Create a silent oscillator to keep the audio graph timing stable
+    // Without this, connecting mic mid-recording causes sync issues
+    const silentOscillator = audioContext.createOscillator()
+    const silentGain = audioContext.createGain()
+    silentGain.gain.value = 0 // Silent
+    silentOscillator.connect(silentGain)
+    silentGain.connect(audioDestination)
+    silentOscillator.start()
+
+    // Connect mic if it's already active
+    if (micStream && micStream.getAudioTracks().some(t => t.readyState === 'live')) {
+      recordingState.micSourceNode = audioContext.createMediaStreamSource(micStream)
+      recordingState.micSourceNode.connect(audioDestination)
+      console.log('Mic connected to audio destination at recording start')
+    }
+
+    // Use high quality settings
+    const recorderOptions = {
+      mimeType: 'video/webm;codecs=vp9',
+      videoBitsPerSecond: 25_000_000 // 25 Mbps for high quality 1080p
+    }
+
+    // Fallback to vp8 if vp9 is not supported
+    if (!MediaRecorder.isTypeSupported(recorderOptions.mimeType)) {
+      recorderOptions.mimeType = 'video/webm;codecs=vp8'
+    }
+
+    // Combine video from recording canvas with audio from destination
+    // The destination provides a constant audio track - mic can be connected/disconnected dynamically
+    const combinedStream = new MediaStream([
+      ...recordingStream.getVideoTracks(),
+      ...audioDestination.stream.getAudioTracks(),
+    ])
+
+    const mediaRecorder = new MediaRecorder(combinedStream, recorderOptions)
+    recordingState.chunks = []
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordingState.chunks.push(event.data)
+      }
+    }
+
+    mediaRecorder.onstop = () => {
+      // Only stop video tracks from recording stream (not mic - managed by toggle)
+      // eslint-disable-next-line unicorn/no-array-for-each
+      recordingStream.getVideoTracks()?.forEach((t) => t.stop())
+
+      const blob = new Blob(recordingState.chunks, { type: 'video/webm' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const date = new Date()
+      link.download = `recording ${date.toLocaleString().replaceAll('.', '-').replace(',', '')}.webm`
+      link.click()
+      URL.revokeObjectURL(url)
+      recordingState.mediaRecorder = null
+      recordingState.chunks = []
+    }
+
+    // Start recording with 1 second timeslice to ensure regular data capture
+    mediaRecorder.start(1000)
+    recordingState.mediaRecorder = mediaRecorder
+    recordingState.startTime = Date.now()
+
+    // Create and show indicator
+    recordingState.indicatorElement = createRecordingIndicator()
+    document.body.appendChild(recordingState.indicatorElement)
+
+    // Start timer update
+    recordingState.timerInterval = setInterval(updateRecordingTime, 1000)
+
+    console.log('Canvas recording started (1920x1080 with webcam overlay)')
+  } catch (error) {
+    console.error('Failed to start canvas recording:', error)
+    // Reset state on error
+    recordingState.isRecording = false
+  }
+}
+
+const stopCanvasRecording = () => {
+  if (recordingState.mediaRecorder && recordingState.isRecording) {
+    recordingState.mediaRecorder.stop()
+    recordingState.isRecording = false
+    customEvents.emit('recordingUpdate', {
+      isRecording: false,
+    })
+
+    // Stop animation frame
+    if (recordingState.animationFrameId) {
+      cancelAnimationFrame(recordingState.animationFrameId)
+      recordingState.animationFrameId = null
+    }
+
+    // Clean up audio context and nodes
+    if (recordingState.micSourceNode) {
+      recordingState.micSourceNode.disconnect()
+      recordingState.micSourceNode = null
+    }
+    if (recordingState.audioContext) {
+      void recordingState.audioContext.close()
+      recordingState.audioContext = null
+    }
+    recordingState.audioDestination = null
+
+    // Clean up recording canvas
+    recordingState.recordingCanvas = null
+    recordingState.recordingCtx = null
+
+    // Clear timer and remove indicator
+    if (recordingState.timerInterval) {
+      clearInterval(recordingState.timerInterval)
+      recordingState.timerInterval = null
+    }
+
+    if (recordingState.indicatorElement) {
+      recordingState.indicatorElement.remove()
+      recordingState.indicatorElement = null
+    }
+
+    console.log('Canvas recording stopped')
+  }
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+  if (recordingState.holdTimeout) {
+    clearTimeout(recordingState.holdTimeout)
+  }
+  if (recordingState.timerInterval) {
+    clearInterval(recordingState.timerInterval)
+  }
+  if (recordingState.animationFrameId) {
+    cancelAnimationFrame(recordingState.animationFrameId)
+  }
+  if (recordingState.isRecording) {
+    stopCanvasRecording()
+  }
+})
+// #endregion
 
 // #region experimental debug things
 window.addEventListener('keydown', (e) => {
