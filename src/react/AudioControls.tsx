@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, CSSProperties, PointerEvent } from 'react'
 import { options } from '../optionsStorage'
 import { musicSystem } from '../sounds/musicSystem'
+import { appQueryParams } from '../appParams'
 import PixelartIcon from './PixelartIcon'
+
 
 declare global {
   interface Window {
@@ -119,6 +121,10 @@ export default function AudioControls () {
     pointerEvents: 'auto',
     userSelect: 'none',
     justifyContent: 'center',
+  }
+
+  if (appQueryParams.isPlayback === 'true') {
+    return null
   }
 
   return (
