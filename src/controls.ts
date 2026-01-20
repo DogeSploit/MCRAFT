@@ -1005,8 +1005,10 @@ export const recordingState: {
   indicatorElement: HTMLDivElement | null
   recordingCanvas: HTMLCanvasElement | null
   recordingCtx: CanvasRenderingContext2D | null
-  webcamVideo: HTMLVideoElement | null
   animationFrameId: number | null
+  audioContext: AudioContext | null
+  audioDestination: MediaStreamAudioDestinationNode | null
+  micSourceNode: MediaStreamAudioSourceNode | null
 } = {
   mediaRecorder: null,
   chunks: [],
@@ -1017,8 +1019,10 @@ export const recordingState: {
   indicatorElement: null,
   recordingCanvas: null,
   recordingCtx: null,
-  webcamVideo: null,
-  animationFrameId: null
+  animationFrameId: null,
+  audioContext: null,
+  audioDestination: null,
+  micSourceNode: null
 }
 
 const createRecordingIndicator = () => {
@@ -1107,6 +1111,8 @@ export const requestMicPermission = async (): Promise<MediaStream | null> => {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
+        sampleRate: { ideal: 48000 },
+        channelCount: { ideal: 2 },
       },
     })
 
@@ -1193,6 +1199,7 @@ const createWebcamPreview = (stream: MediaStream) => {
     border-radius: ${previewBorderRadius}px;
     z-index: 9999;
     pointer-events: none;
+    transform: scaleX(-1);
   `
 
   return video
@@ -1201,6 +1208,11 @@ const createWebcamPreview = (stream: MediaStream) => {
 export const toggleMic = async () => {
   if (micStream) {
     // Deactivate mic
+    // Disconnect from audio destination if recording
+    if (recordingState.micSourceNode) {
+      recordingState.micSourceNode.disconnect()
+      recordingState.micSourceNode = null
+    }
     // eslint-disable-next-line unicorn/no-array-for-each
     micStream.getTracks()?.forEach((t) => t.stop())
     micStream = null
@@ -1211,6 +1223,12 @@ export const toggleMic = async () => {
   } else {
     // Activate mic
     await requestMicPermission()
+    // Hot-plug: connect to audio destination if recording is active
+    if (micStream && recordingState.audioContext && recordingState.audioDestination) {
+      recordingState.micSourceNode = recordingState.audioContext.createMediaStreamSource(micStream)
+      recordingState.micSourceNode.connect(recordingState.audioDestination)
+      console.log('Mic connected to recording audio destination')
+    }
     console.log('Mic activated:', !!micStream)
   }
 }
@@ -1316,6 +1334,12 @@ const drawRoundedRect = (
 }
 
 const startCanvasRecording = async () => {
+  // Prevent double-starting
+  if (recordingState.isRecording) {
+    console.warn('Recording already in progress')
+    return
+  }
+
   const gameCanvas = document.getElementById('viewer-canvas') as HTMLCanvasElement
   if (!gameCanvas) {
     console.warn('Canvas not found for recording')
@@ -1335,11 +1359,8 @@ const startCanvasRecording = async () => {
     recordingState.recordingCanvas = recordingCanvas
     recordingState.recordingCtx = ctx
 
-    // Use existing webcam preview element if mic/cam was toggled on
-    const webcamVideo = webcamPreviewElement
-    recordingState.webcamVideo = webcamVideo
-
     // Compositing loop - draws game canvas and webcam to recording canvas
+    // Uses webcamPreviewElement directly for camera hot-plugging support
     const drawFrame = () => {
       if (!recordingState.isRecording) return
 
@@ -1347,7 +1368,8 @@ const startCanvasRecording = async () => {
       ctx.drawImage(gameCanvas, 0, 0, RECORDING_WIDTH, RECORDING_HEIGHT)
 
       // Draw webcam if available (square, bottom right, with rounded corners)
-      if (webcamVideo && webcamVideo.readyState >= 2) {
+      // Uses webcamPreviewElement directly so camera can be hot-plugged
+      if (webcamPreviewElement && webcamPreviewElement.readyState >= 2) {
         const webcamX = RECORDING_WIDTH - WEBCAM_SIZE - WEBCAM_PADDING
         const webcamY = RECORDING_HEIGHT - WEBCAM_SIZE - WEBCAM_PADDING
 
@@ -1358,21 +1380,25 @@ const startCanvasRecording = async () => {
         drawRoundedRect(ctx, webcamX, webcamY, WEBCAM_SIZE, WEBCAM_SIZE, WEBCAM_BORDER_RADIUS)
         ctx.clip()
 
+        // Flip horizontally for mirror effect
+        ctx.translate(webcamX + WEBCAM_SIZE, webcamY)
+        ctx.scale(-1, 1)
+
         // Calculate crop to make webcam square (center crop)
-        const { videoWidth, videoHeight } = webcamVideo
+        const { videoWidth, videoHeight } = webcamPreviewElement
         const minDim = Math.min(videoWidth, videoHeight)
         const srcX = (videoWidth - minDim) / 2
         const srcY = (videoHeight - minDim) / 2
 
-        // Draw the webcam video cropped to square
+        // Draw the webcam video cropped to square (at 0,0 since we translated)
         ctx.drawImage(
-          webcamVideo,
+          webcamPreviewElement,
           srcX,
           srcY,
           minDim,
           minDim,
-          webcamX,
-          webcamY,
+          0,
+          0,
           WEBCAM_SIZE,
           WEBCAM_SIZE
         )
@@ -1394,6 +1420,39 @@ const startCanvasRecording = async () => {
     // Capture the recording canvas stream at 60fps
     const recordingStream = recordingCanvas.captureStream(60)
 
+    // Set up AudioContext for mic hot-plugging support
+    // The audio destination provides a constant audio track that we can connect/disconnect mic to
+    // Use high sample rate and playback latency hint for better quality
+    const audioContext = new AudioContext({
+      sampleRate: 48000,
+      latencyHint: 'playback'
+    })
+
+    // Ensure AudioContext is running (may be suspended on subsequent recordings)
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume()
+    }
+
+    const audioDestination = audioContext.createMediaStreamDestination()
+    recordingState.audioContext = audioContext
+    recordingState.audioDestination = audioDestination
+
+    // Create a silent oscillator to keep the audio graph timing stable
+    // Without this, connecting mic mid-recording causes sync issues
+    const silentOscillator = audioContext.createOscillator()
+    const silentGain = audioContext.createGain()
+    silentGain.gain.value = 0 // Silent
+    silentOscillator.connect(silentGain)
+    silentGain.connect(audioDestination)
+    silentOscillator.start()
+
+    // Connect mic if it's already active
+    if (micStream && micStream.getAudioTracks().some(t => t.readyState === 'live')) {
+      recordingState.micSourceNode = audioContext.createMediaStreamSource(micStream)
+      recordingState.micSourceNode.connect(audioDestination)
+      console.log('Mic connected to audio destination at recording start')
+    }
+
     // Use high quality settings
     const recorderOptions = {
       mimeType: 'video/webm;codecs=vp9',
@@ -1405,10 +1464,11 @@ const startCanvasRecording = async () => {
       recorderOptions.mimeType = 'video/webm;codecs=vp8'
     }
 
-    // Combine video from recording canvas with audio from mic (if active)
+    // Combine video from recording canvas with audio from destination
+    // The destination provides a constant audio track - mic can be connected/disconnected dynamically
     const combinedStream = new MediaStream([
       ...recordingStream.getVideoTracks(),
-      ...(micStream?.getAudioTracks() ?? []),
+      ...audioDestination.stream.getAudioTracks(),
     ])
 
     const mediaRecorder = new MediaRecorder(combinedStream, recorderOptions)
@@ -1437,7 +1497,8 @@ const startCanvasRecording = async () => {
       recordingState.chunks = []
     }
 
-    mediaRecorder.start()
+    // Start recording with 1 second timeslice to ensure regular data capture
+    mediaRecorder.start(1000)
     recordingState.mediaRecorder = mediaRecorder
     recordingState.startTime = Date.now()
 
@@ -1451,6 +1512,8 @@ const startCanvasRecording = async () => {
     console.log('Canvas recording started (1920x1080 with webcam overlay)')
   } catch (error) {
     console.error('Failed to start canvas recording:', error)
+    // Reset state on error
+    recordingState.isRecording = false
   }
 }
 
@@ -1468,8 +1531,16 @@ const stopCanvasRecording = () => {
       recordingState.animationFrameId = null
     }
 
-    // Clear reference to webcam video (but don't remove it - managed by toggle)
-    recordingState.webcamVideo = null
+    // Clean up audio context and nodes
+    if (recordingState.micSourceNode) {
+      recordingState.micSourceNode.disconnect()
+      recordingState.micSourceNode = null
+    }
+    if (recordingState.audioContext) {
+      void recordingState.audioContext.close()
+      recordingState.audioContext = null
+    }
+    recordingState.audioDestination = null
 
     // Clean up recording canvas
     recordingState.recordingCanvas = null
