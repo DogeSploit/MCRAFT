@@ -969,6 +969,10 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     const cached = this.geometryCache.get(sectionKey)
     if (!cached) return false
 
+    // Validate that the cached hash matches the current section hash
+    const currentHash = this.sectionHashes.get(sectionKey)
+    if (!currentHash || cached.hash !== currentHash) return false
+
     // Use the cached geometry by simulating a worker message
     this.geometryCacheHits++
     const fakeWorkerMessage = {
@@ -998,7 +1002,8 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     const key = `${Math.floor(pos.x / 16) * 16},${Math.floor(pos.y / 16) * 16},${Math.floor(pos.z / 16) * 16}`
 
     // Try to use cached geometry if available (only when setting dirty, not when clearing)
-    if (value && this.tryUseCachedGeometry(key)) {
+    // Skip cache when using change worker to ensure proper tracking
+    if (value && !useChangeWorker && this.tryUseCachedGeometry(key)) {
       this.logWorkerWork(() => `<- cache hit for section ${key}`)
       return
     }

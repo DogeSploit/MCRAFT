@@ -67,9 +67,11 @@ export function computeBlockHash (blockStateIds: Uint16Array): string {
  * Use this for more secure hashing when persistent storage is used
  */
 export async function computeBlockHashAsync (blockStateIds: Uint16Array): Promise<string> {
-  if (crypto?.subtle) {
+  if (globalThis.crypto?.subtle) {
     try {
-      const buffer = await crypto.subtle.digest('SHA-256', blockStateIds.buffer)
+      // Pass the typed array view directly (not .buffer which includes the entire ArrayBuffer)
+      const viewBytes = new Uint8Array(blockStateIds.buffer, blockStateIds.byteOffset, blockStateIds.byteLength)
+      const buffer = await crypto.subtle.digest('SHA-256', viewBytes)
       const hashArray = [...new Uint8Array(buffer)]
       // Use first 8 bytes for a shorter hash
       return hashArray.slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('')

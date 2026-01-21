@@ -681,6 +681,9 @@ const registerChunkCacheChannel = () => {
     ]
   ]
 
+  // Get server address before probing so it's available for both success and failure cases
+  const serverAddress = lastConnectOptions.value?.server || 'unknown'
+
   // Try to register the channel - if server doesn't support it, cache will use memory-only mode
   try {
     bot._client.registerChannel(CHANNEL_NAME, packetStructure, true)
@@ -688,7 +691,6 @@ const registerChunkCacheChannel = () => {
     // Listen for server's response indicating chunk-cache support
     bot._client.on(CHANNEL_NAME as any, (data) => {
       if (data.cacheEnabled) {
-        const serverAddress = lastConnectOptions.value?.server || 'unknown'
         chunkGeometryCache.setServerSupportsChannel(true, serverAddress)
         console.debug(`Server ${serverAddress} supports chunk-cache channel - using IndexedDB for persistent caching`)
       }
@@ -704,9 +706,9 @@ const registerChunkCacheChannel = () => {
 
     console.debug(`Registered ${CHANNEL_NAME} channel - probing for server support`)
   } catch (error) {
-    // Server doesn't support the channel - use memory-only cache
+    // Server doesn't support the channel - use memory-only cache with server address for scoping
     console.debug('Server does not support chunk-cache channel - using memory-only cache')
-    chunkGeometryCache.setServerSupportsChannel(false)
+    chunkGeometryCache.setServerSupportsChannel(false, serverAddress)
   }
 }
 

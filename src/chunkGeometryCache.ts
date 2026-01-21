@@ -112,9 +112,26 @@ class ChunkGeometryCache {
       ? blockStateIds
       : new Uint16Array(blockStateIds)
 
-    const buffer = await crypto.subtle.digest('SHA-256', data.buffer)
-    const hashArray = [...new Uint8Array(buffer)]
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    // Check for WebCrypto availability
+    if (globalThis.crypto?.subtle) {
+      try {
+        // Pass the typed array view directly (not .buffer which includes the entire ArrayBuffer)
+        const viewBytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        const buffer = await crypto.subtle.digest('SHA-256', viewBytes)
+        const hashArray = [...new Uint8Array(buffer)]
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      } catch {
+        // Fall through to FNV-1a fallback
+      }
+    }
+
+    // Fallback to FNV-1a hash when WebCrypto is unavailable
+    let hash = 2_166_136_261 // FNV offset basis
+    for (const stateId of data) {
+      hash ^= stateId
+      hash = Math.imul(hash, 16_777_619) // FNV prime
+    }
+    return (hash >>> 0).toString(16).padStart(8, '0')
   }
 
   /**
