@@ -173,6 +173,13 @@ export function setupIframeComms () {
 
     // Check if this is a seek command and re-establish following after a delay
     if (command.includes('replay view jump to timestamp')) {
+      // Parse the timestamp from the command (format: "replay view jump to timestamp <ms>")
+      const match = command.match(/replay view jump to timestamp\s+(\d+)/)
+      if (match) {
+        const targetMs = parseInt(match[1], 10)
+        audioTrackScheduler.setSeekTarget(targetMs)
+      }
+
       // Wait a bit for the seek to complete and entities to spawn
       setTimeout(() => {
         void reestablishFollowing()
