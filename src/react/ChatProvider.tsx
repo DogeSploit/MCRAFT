@@ -13,8 +13,26 @@ const PLAYER_CHAT_TRANSLATE_KEYS = new Set([
   'chat.type.team.sent',      // team chat sent
 ])
 
+// System message translate key prefixes to exclude from canvas rendering
+const EXCLUDED_TRANSLATE_PREFIXES = [
+  'chat.type.advancement',    // advancement messages
+  'death.',                   // death messages
+  'multiplayer.player.joined', // player joined
+  'multiplayer.player.left',  // player left
+]
+
 function isPlayerChatMessage (jsonMsg: any): boolean {
   const translate = jsonMsg?.translate || jsonMsg?.json?.translate
+
+  // Exclude system messages by prefix
+  if (translate) {
+    for (const prefix of EXCLUDED_TRANSLATE_PREFIXES) {
+      if (translate.startsWith(prefix)) {
+        return false
+      }
+    }
+  }
+
   if (translate && PLAYER_CHAT_TRANSLATE_KEYS.has(translate)) {
     return true
   }

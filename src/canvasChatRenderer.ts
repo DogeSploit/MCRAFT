@@ -6,7 +6,7 @@ export { ChatRenderCanvas } from './canvasChatMessages'
 
 // Rendering constants
 const BASE_FONT_SIZE = 16
-const LINE_HEIGHT = 44
+const LINE_HEIGHT = 32
 const PADDING_LEFT = 20
 const PADDING_BOTTOM = 100 // Above hotbar
 const MAX_VISIBLE_MESSAGES = 10
@@ -137,6 +137,30 @@ function buildFontString (part: MessageFormatPart, fontSize: number): string {
   return styles.join(' ')
 }
 
+/**
+ * Extract username from message parts.
+ * With format "%s %s", the username is the first non-empty/whitespace part.
+ */
+function extractUsername (parts: MessageFormatPart[]): { username: string; part: MessageFormatPart } | null {
+  for (const part of parts) {
+    if (part.text && part.text.trim()) {
+      return { username: part.text.trim(), part }
+    }
+  }
+  return null
+}
+
+/**
+ * Measure the width of the username text.
+ */
+function measureUsernameWidth (ctx: CanvasRenderingContext2D, parts: MessageFormatPart[], fontSize: number): number {
+  const usernameInfo = extractUsername(parts)
+  if (!usernameInfo) return 0
+
+  ctx.font = buildFontString(usernameInfo.part, fontSize)
+  return ctx.measureText(usernameInfo.username).width + 4
+}
+
 // eslint-disable-next-line max-params
 function renderMessageLine (
   ctx: CanvasRenderingContext2D,
@@ -235,41 +259,61 @@ export function renderChatOnCanvas (): void {
   const iconSize = Math.round(fontSize * 1.1)
   const iconPadding = Math.round(fontSize * 0.3)
 
+  const badgePaddingX = Math.round(fontSize * 0.3)
+  const badgePaddingY = Math.round(fontSize * 0.3)
+  const badgeBorderRadius = 4
+
   for (const [i, { msg, opacity }] of messagesToRender.entries()) {
     const y = startY + i * lineHeight
     let xOffset = paddingLeft
 
     // Check for provider logo
     const provider = detectProviderInMessage(msg.parts)
-    if (provider) {
-      const logoUrl = providerLogo(provider)
-      if (logoUrl) {
-        const logoImg = loadLogoImage(logoUrl)
-        if (logoImg) {
-          ctx.globalAlpha = opacity
-          // Draw logo centered vertically with the text
-          const logoY = y - (iconSize - fontSize) / 2
-          const borderRadius = 2
+    const logoImg = provider ? loadLogoImage(providerLogo(provider) ?? '') : null
 
-          ctx.save()
+    // Calculate badge dimensions (logo + username)
+    const usernameWidth = measureUsernameWidth(ctx, msg.parts, fontSize)
+    const hasLogo = !!logoImg
+    const logoTotalWidth = hasLogo ? iconSize + iconPadding : 0
+    const badgeContentWidth = logoTotalWidth + usernameWidth
+    const badgeWidth = badgeContentWidth + badgePaddingX * 2
+    const badgeHeight = iconSize + badgePaddingY * 2
+    const badgeY = y - (iconSize - fontSize) / 2 - badgePaddingY
 
-          // Draw white rounded rectangle background
-          ctx.fillStyle = '#FFFFFF'
-          ctx.beginPath()
-          ctx.roundRect(xOffset, logoY, iconSize, iconSize, borderRadius)
-          ctx.fill()
+    // Draw 30% opacity background rectangle for logo + username
+    if (usernameWidth > 0) {
+      ctx.save()
+      ctx.globalAlpha = opacity * 0.3
+      ctx.fillStyle = '#000000'
+      ctx.beginPath()
+      ctx.roundRect(xOffset - badgePaddingX, badgeY, badgeWidth, badgeHeight, badgeBorderRadius)
+      ctx.fill()
+      ctx.restore()
+    }
 
-          // Clip to rounded rectangle and draw logo
-          ctx.beginPath()
-          ctx.roundRect(xOffset, logoY, iconSize, iconSize, borderRadius)
-          ctx.clip()
-          ctx.drawImage(logoImg, xOffset, logoY, iconSize, iconSize)
+    // Draw logo if present
+    if (logoImg) {
+      ctx.globalAlpha = opacity
+      const logoY = y - (iconSize - fontSize) / 2
+      const logoBorderRadius = 2
 
-          ctx.restore()
+      ctx.save()
 
-          xOffset += iconSize + iconPadding
-        }
-      }
+      // Draw white rounded rectangle background for logo
+      ctx.fillStyle = '#FFFFFF'
+      ctx.beginPath()
+      ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
+      ctx.fill()
+
+      // Clip to rounded rectangle and draw logo
+      ctx.beginPath()
+      ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
+      ctx.clip()
+      ctx.drawImage(logoImg, xOffset, logoY, iconSize, iconSize)
+
+      ctx.restore()
+
+      xOffset += iconSize + iconPadding
     }
 
     renderMessageLine(ctx, msg.parts, xOffset, y, fontSize, opacity)
