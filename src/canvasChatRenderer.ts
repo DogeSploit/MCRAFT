@@ -1,8 +1,8 @@
 import { getColorShadow, messageFormatStylesMap } from './react/MessageFormatted'
-import { getCanvasChatMessages, getMessageOpacity, CanvasChatMessage } from './canvasChatMessages'
+import { getCanvasChatMessages, getMessageOpacity, getChatLayout, updateMessageAnimation, CanvasChatMessage } from './canvasChatMessages'
 import type { MessageFormatPart } from './chatUtils'
 
-export { ChatRenderCanvas } from './canvasChatMessages'
+export { ChatRenderCanvas, setChatLayout } from './canvasChatMessages'
 
 // Rendering constants
 const BASE_FONT_SIZE = 16
@@ -161,6 +161,40 @@ function measureUsernameWidth (ctx: CanvasRenderingContext2D, parts: MessageForm
   return ctx.measureText(usernameInfo.username).width + 4
 }
 
+/**
+ * Get the message text after the username (for stacked layout).
+ */
+function getMessageTextAfterUsername (parts: MessageFormatPart[]): MessageFormatPart[] {
+  let foundUsername = false
+  const result: MessageFormatPart[] = []
+
+  for (const part of parts) {
+    if (!foundUsername && part.text?.trim()) {
+      // This is the username, skip it but include any trailing space
+      foundUsername = true
+      continue
+    }
+    if (foundUsername) {
+      result.push(part)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Measure the total width of message parts.
+ */
+function measurePartsWidth (ctx: CanvasRenderingContext2D, parts: MessageFormatPart[], fontSize: number): number {
+  let width = 0
+  for (const part of parts) {
+    if (!part.text) continue
+    ctx.font = buildFontString(part, fontSize)
+    width += ctx.measureText(part.text).width
+  }
+  return width
+}
+
 // eslint-disable-next-line max-params
 function renderMessageLine (
   ctx: CanvasRenderingContext2D,
@@ -217,35 +251,14 @@ function renderMessageLine (
   ctx.globalAlpha = 1
 }
 
-export function renderChatOnCanvas (): void {
-  const overlay = getOrCreateOverlayCanvas()
-  if (!overlay) return
-
-  const { canvas, ctx } = overlay
-  const canvasWidth = canvas.width
-  const canvasHeight = canvas.height
-
-  // Clear the overlay canvas
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
-
-  const messages = getCanvasChatMessages()
-
-  // Filter to only visible messages (opacity > 0)
-  const visibleMessages: Array<{ msg: CanvasChatMessage; opacity: number }> = []
-  for (const msg of messages) {
-    const opacity = getMessageOpacity(msg)
-    if (opacity > 0) {
-      visibleMessages.push({ msg, opacity })
-    }
-  }
-
-  // Take only the last N visible messages
-  const messagesToRender = visibleMessages.slice(-MAX_VISIBLE_MESSAGES)
-
-  if (messagesToRender.length === 0) return
-
-  // Scale font size based on canvas size (baseline: 800px height)
-  const scaleFactor = Math.max(1, canvasHeight / 800)
+// eslint-disable-next-line max-params
+function renderMinecraftLayout (
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  messagesToRender: Array<{ msg: CanvasChatMessage; opacity: number }>,
+  scaleFactor: number
+): void {
   const fontSize = Math.round(BASE_FONT_SIZE * scaleFactor)
   const lineHeight = Math.round(LINE_HEIGHT * scaleFactor)
   const paddingBottom = Math.round(PADDING_BOTTOM * scaleFactor)
@@ -317,6 +330,249 @@ export function renderChatOnCanvas (): void {
     }
 
     renderMessageLine(ctx, msg.parts, xOffset, y, fontSize, opacity)
+  }
+}
+
+// Stacked layout constants
+const STACKED_CARD_PADDING = 12
+const STACKED_CARD_GAP = 8
+const STACKED_CARD_BORDER_RADIUS = 8
+const STACKED_PADDING_RIGHT = 20
+const STACKED_PADDING_BOTTOM = 100
+const STACKED_CARD_WIDTH = 300 // Fixed width
+
+/**
+ * Wrap message parts to fit within maxWidth.
+ * Returns array of lines, each line is an array of parts.
+ */
+function wrapMessageParts (
+  ctx: CanvasRenderingContext2D,
+  parts: MessageFormatPart[],
+  fontSize: number,
+  maxWidth: number
+): MessageFormatPart[][] {
+  const lines: MessageFormatPart[][] = []
+  let currentLine: MessageFormatPart[] = []
+  let currentLineWidth = 0
+
+  for (const part of parts) {
+    if (!part.text) continue
+
+    ctx.font = buildFontString(part, fontSize)
+    const words = part.text.split(/(\s+)/) // Split keeping whitespace
+
+    for (const word of words) {
+      if (!word) continue
+
+      const wordWidth = ctx.measureText(word).width
+
+      // If this word would exceed the line width
+      if (currentLineWidth + wordWidth > maxWidth && currentLine.length > 0) {
+        // Start a new line
+        lines.push(currentLine)
+        currentLine = []
+        currentLineWidth = 0
+      }
+
+      // Add word to current line (as a new part with same styling)
+      if (word.trim() || currentLineWidth > 0) { // Don't start line with whitespace
+        currentLine.push({ ...part, text: word })
+        currentLineWidth += wordWidth
+      }
+    }
+  }
+
+  // Don't forget the last line
+  if (currentLine.length > 0) {
+    lines.push(currentLine)
+  }
+
+  return lines.length > 0 ? lines : [[]]
+}
+
+// eslint-disable-next-line max-params
+function renderStackedLayout (
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  messagesToRender: Array<{ msg: CanvasChatMessage; opacity: number }>,
+  scaleFactor: number
+): void {
+  const fontSize = Math.round(BASE_FONT_SIZE * scaleFactor)
+  const cardPadding = Math.round(STACKED_CARD_PADDING * scaleFactor)
+  const cardGap = Math.round(STACKED_CARD_GAP * scaleFactor)
+  const cardBorderRadius = Math.round(STACKED_CARD_BORDER_RADIUS * scaleFactor)
+  const paddingRight = Math.round(STACKED_PADDING_RIGHT * scaleFactor)
+  const paddingBottom = Math.round(STACKED_PADDING_BOTTOM * scaleFactor)
+  const cardWidth = Math.round(STACKED_CARD_WIDTH * scaleFactor)
+
+  const iconSize = Math.round(fontSize * 1.2)
+  const iconPadding = Math.round(fontSize * 0.4)
+  const lineSpacing = Math.round(fontSize * 0.3)
+  const messageLineHeight = Math.round(fontSize * 1.3)
+
+  ctx.textBaseline = 'top'
+
+  // Calculate available width for message text
+  const messageMaxWidth = cardWidth - cardPadding * 2
+
+  // Calculate card heights and positions from bottom up
+  // We need to measure each card first to know where to position them
+  const cardMeasurements: Array<{
+    msg: CanvasChatMessage
+    opacity: number
+    cardHeight: number
+    usernameInfo: { username: string; part: MessageFormatPart } | null
+    wrappedLines: MessageFormatPart[][]
+    provider: string | null
+    logoImg: HTMLImageElement | null
+  }> = []
+
+  for (const { msg, opacity } of messagesToRender) {
+    const provider = detectProviderInMessage(msg.parts)
+    const logoImg = provider ? loadLogoImage(providerLogo(provider) ?? '') : null
+    const usernameInfo = extractUsername(msg.parts)
+    const messageText = getMessageTextAfterUsername(msg.parts)
+
+    // Wrap message to fit card width
+    const wrappedLines = wrapMessageParts(ctx, messageText, fontSize, messageMaxWidth)
+
+    // Card has: logo + username on first line, wrapped message below
+    const headerHeight = iconSize
+    const messageHeight = wrappedLines.length * messageLineHeight
+    const cardHeight = cardPadding + headerHeight + lineSpacing + messageHeight + cardPadding
+
+    cardMeasurements.push({
+      msg,
+      opacity,
+      cardHeight,
+      usernameInfo,
+      wrappedLines,
+      provider,
+      logoImg
+    })
+  }
+
+  // First pass: calculate all target Y positions
+  const targetPositions: number[] = []
+  let calcY = canvasHeight - paddingBottom
+  for (let i = cardMeasurements.length - 1; i >= 0; i--) {
+    const targetY = calcY - cardMeasurements[i].cardHeight
+    targetPositions[i] = targetY
+    calcY = targetY - cardGap
+  }
+
+  // Second pass: render with animation
+  for (let i = cardMeasurements.length - 1; i >= 0; i--) {
+    const card = cardMeasurements[i]
+    const { msg, opacity, cardHeight, usernameInfo, wrappedLines, logoImg } = card
+
+    // Get target Y and animate toward it
+    const targetY = targetPositions[i]
+    const animatedY = updateMessageAnimation(msg, targetY)
+
+    // Position from right edge (fixed width)
+    const cardX = canvasWidth - paddingRight - cardWidth
+
+    // Draw card background (30% opacity black)
+    ctx.save()
+    ctx.globalAlpha = opacity * 0.3
+    ctx.fillStyle = '#000000'
+    ctx.beginPath()
+    ctx.roundRect(cardX, animatedY, cardWidth, cardHeight, cardBorderRadius)
+    ctx.fill()
+    ctx.restore()
+
+    // Draw content
+    let contentX = cardX + cardPadding
+    const contentY = animatedY + cardPadding
+
+    // Draw logo if present
+    if (logoImg) {
+      ctx.globalAlpha = opacity
+      const logoBorderRadius = 2
+
+      ctx.save()
+
+      // Draw white rounded rectangle background for logo
+      ctx.fillStyle = '#FFFFFF'
+      ctx.beginPath()
+      ctx.roundRect(contentX, contentY, iconSize, iconSize, logoBorderRadius)
+      ctx.fill()
+
+      // Clip to rounded rectangle and draw logo
+      ctx.beginPath()
+      ctx.roundRect(contentX, contentY, iconSize, iconSize, logoBorderRadius)
+      ctx.clip()
+      ctx.drawImage(logoImg, contentX, contentY, iconSize, iconSize)
+
+      ctx.restore()
+
+      contentX += iconSize + iconPadding
+    }
+
+    // Draw username
+    if (usernameInfo) {
+      ctx.font = buildFontString(usernameInfo.part, fontSize)
+      const color = getColor(usernameInfo.part.color)
+      const shadowColor = getColorShadow(color)
+
+      // Center username vertically with icon
+      const usernameY = contentY + (iconSize - fontSize) / 2
+
+      ctx.globalAlpha = opacity
+      ctx.fillStyle = shadowColor
+      ctx.fillText(usernameInfo.username, contentX + SHADOW_OFFSET, usernameY + SHADOW_OFFSET)
+      ctx.fillStyle = color
+      ctx.fillText(usernameInfo.username, contentX, usernameY)
+    }
+
+    // Draw wrapped message lines
+    let messageY = animatedY + cardPadding + iconSize + lineSpacing
+    for (const line of wrappedLines) {
+      renderMessageLine(ctx, line, cardX + cardPadding, messageY, fontSize, opacity)
+      messageY += messageLineHeight
+    }
+  }
+
+  ctx.globalAlpha = 1
+}
+
+export function renderChatOnCanvas (): void {
+  const overlay = getOrCreateOverlayCanvas()
+  if (!overlay) return
+
+  const { canvas, ctx } = overlay
+  const canvasWidth = canvas.width
+  const canvasHeight = canvas.height
+
+  // Clear the overlay canvas
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight)
+
+  const messages = getCanvasChatMessages()
+
+  // Filter to only visible messages (opacity > 0)
+  const visibleMessages: Array<{ msg: CanvasChatMessage; opacity: number }> = []
+  for (const msg of messages) {
+    const opacity = getMessageOpacity(msg)
+    if (opacity > 0) {
+      visibleMessages.push({ msg, opacity })
+    }
+  }
+
+  // Take only the last N visible messages
+  const messagesToRender = visibleMessages.slice(-MAX_VISIBLE_MESSAGES)
+
+  if (messagesToRender.length === 0) return
+
+  // Scale based on canvas size (baseline: 800px height)
+  const scaleFactor = Math.max(1, canvasHeight / 800)
+
+  const layout = getChatLayout()
+  if (layout === 'stacked') {
+    renderStackedLayout(ctx, canvasWidth, canvasHeight, messagesToRender, scaleFactor)
+  } else {
+    renderMinecraftLayout(ctx, canvasWidth, canvasHeight, messagesToRender, scaleFactor)
   }
 }
 
