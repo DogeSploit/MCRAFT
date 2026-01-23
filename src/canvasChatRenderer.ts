@@ -143,7 +143,7 @@ function buildFontString (part: MessageFormatPart, fontSize: number): string {
  */
 function extractUsername (parts: MessageFormatPart[]): { username: string; part: MessageFormatPart } | null {
   for (const part of parts) {
-    if (part.text && part.text.trim()) {
+    if (part.text?.trim()) {
       return { username: part.text.trim(), part }
     }
   }

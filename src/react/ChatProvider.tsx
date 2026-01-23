@@ -3,22 +3,30 @@ import { useSnapshot } from 'valtio'
 import { formatMessage } from '../chatUtils'
 import { addCanvasChatMessage, ChatRenderCanvas } from '../canvasChatMessages'
 import { getBuiltinCommandsList, tryHandleBuiltinCommand } from '../builtinCommands'
+import { gameAdditionalState, hideCurrentModal, miscUiState } from '../globalState'
+import { options } from '../optionsStorage'
+import { viewerVersionState } from '../viewerConnector'
+import Chat, { Message, fadeMessage } from './Chat'
+import { useIsModalActive } from './utilsApp'
+import { hideNotification, showNotification } from './NotificationProvider'
+import { updateLoadedServerData } from './serversStorage'
+import { lastConnectOptions } from './AppStatusProvider'
 
 // Player chat translate keys (format: "<player> message" or "* player message")
 const PLAYER_CHAT_TRANSLATE_KEYS = new Set([
-  'chat.type.text',           // <player> message
-  'chat.type.emote',          // * player message
-  'chat.type.announcement',   // [player] message (broadcasts)
-  'chat.type.team.text',      // team chat
-  'chat.type.team.sent',      // team chat sent
+  'chat.type.text', // <player> message
+  'chat.type.emote', // * player message
+  'chat.type.announcement', // [player] message (broadcasts)
+  'chat.type.team.text', // team chat
+  'chat.type.team.sent', // team chat sent
 ])
 
 // System message translate key prefixes to exclude from canvas rendering
 const EXCLUDED_TRANSLATE_PREFIXES = [
-  'chat.type.advancement',    // advancement messages
-  'death.',                   // death messages
+  'chat.type.advancement', // advancement messages
+  'death.', // death messages
   'multiplayer.player.joined', // player joined
-  'multiplayer.player.left',  // player left
+  'multiplayer.player.left', // player left
 ]
 
 function isPlayerChatMessage (jsonMsg: any): boolean {
@@ -47,14 +55,7 @@ function isPlayerChatMessage (jsonMsg: any): boolean {
   }
   return false
 }
-import { gameAdditionalState, hideCurrentModal, miscUiState } from '../globalState'
-import { options } from '../optionsStorage'
-import { viewerVersionState } from '../viewerConnector'
-import Chat, { Message, fadeMessage } from './Chat'
-import { useIsModalActive } from './utilsApp'
-import { hideNotification, showNotification } from './NotificationProvider'
-import { updateLoadedServerData } from './serversStorage'
-import { lastConnectOptions } from './AppStatusProvider'
+
 
 export default () => {
   const [messages, setMessages] = useState([] as Message[])
