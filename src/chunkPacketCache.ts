@@ -5,6 +5,10 @@
  * This enables bandwidth savings when the server supports the chunk-cache channel
  * by allowing clients to reuse previously received chunk data.
  *
+ * Uses browserfs + fs file storage for persistent caching.
+ * Storage structure: /data/chunk-cache/{serverAddress}/{x},{z}.bin
+ * Metadata stored in: /data/chunk-cache/{serverAddress}/metadata.json
+ *
  * Protocol:
  * 1. On login, client sends array of cached chunks {x, z, hash} to server
  * 2. Server responds with:
@@ -13,10 +17,14 @@
  * 3. For cache hits, client emits cached map_chunk packet data locally
  */
 
-const DB_NAME = 'minecraft-web-client-chunk-packet-cache'
-const DB_VERSION = 1
-const STORE_NAME = 'chunk-packets'
-const MAX_CACHE_SIZE = 1000 // Store more chunks since packet data is smaller than geometry
+import fs from 'fs'
+import { join } from 'path'
+import sanitize from 'sanitize-filename'
+import { mkdirRecursive, existsViaStats } from './browserfs'
+
+const CACHE_BASE = '/data/chunk-cache'
+const MAX_CACHE_SIZE = 1000 // Max chunks per server
+const METADATA_FILE = 'metadata.json'
 
 export interface CachedChunkPacket {
   chunkKey: string // "x,z"
@@ -32,63 +40,126 @@ export interface CachedChunkInfo {
   hash: string
 }
 
+interface ChunkMetadata {
+  hash: string
+  lastAccessed: number
+}
+
+interface ServerMetadata {
+  chunks: Record<string, ChunkMetadata> // key is "x,z"
+}
+
 class ChunkPacketCache {
-  private db: IDBDatabase | null = null
   private readonly memoryCache = new Map<string, CachedChunkPacket>()
   private serverAddress = 'unknown'
-  private initPromise: Promise<void> | null = null
   private serverSupportsChannel = false
+  private metadata: ServerMetadata = { chunks: {} }
+  private metadataDirty = false
+  private saveMetadataTimeout: ReturnType<typeof setTimeout> | null = null
 
   /**
    * Initialize the cache system
    */
   async init (): Promise<void> {
-    if (this.initPromise) return this.initPromise
-    this.initPromise = this.openDatabase()
-    return this.initPromise
+    try {
+      await mkdirRecursive(CACHE_BASE)
+      console.debug('Chunk packet cache initialized')
+    } catch (error) {
+      console.warn('Failed to initialize chunk packet cache:', error)
+    }
   }
 
-  private async openDatabase (): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION)
+  /**
+   * Get sanitized server directory name
+   */
+  private getServerDir (): string {
+    const sanitized = sanitize(this.serverAddress.replace(/[/:]/g, '_'))
+    return join(CACHE_BASE, sanitized || 'unknown')
+  }
 
-      request.onerror = () => {
-        console.warn('Failed to open chunk packet cache database:', request.error)
-        resolve()
-      }
+  /**
+   * Get chunk file path
+   */
+  private getChunkPath (x: number, z: number): string {
+    return join(this.getServerDir(), `${x},${z}.bin`)
+  }
 
-      request.onsuccess = () => {
-        this.db = request.result
-        console.debug('Chunk packet cache database opened successfully')
-        resolve()
-      }
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'chunkKey' })
-          store.createIndex('lastAccessed', 'lastAccessed', { unique: false })
-          store.createIndex('serverAddress', 'serverAddress', { unique: false })
-          console.debug('Chunk packet cache object store created')
-        }
-      }
-    })
+  /**
+   * Get metadata file path
+   */
+  private getMetadataPath (): string {
+    return join(this.getServerDir(), METADATA_FILE)
   }
 
   /**
    * Set server address and channel support status
    */
-  setServerInfo (serverAddress: string, supportsChannel: boolean): void {
+  async setServerInfo (serverAddress: string, supportsChannel: boolean): Promise<void> {
     this.serverAddress = serverAddress
     this.serverSupportsChannel = supportsChannel
+    this.memoryCache.clear()
+    this.metadata = { chunks: {} }
+
     console.debug(`Chunk packet cache: server=${serverAddress}, supportsChannel=${supportsChannel}`)
+
+    // Load existing metadata for this server
+    await this.loadMetadata()
   }
 
   /**
-   * Get full cache key including server address
+   * Load metadata from disk
    */
-  private getCacheKey (x: number, z: number): string {
+  private async loadMetadata (): Promise<void> {
+    try {
+      const metadataPath = this.getMetadataPath()
+      if (await existsViaStats(metadataPath)) {
+        const data = await fs.promises.readFile(metadataPath)
+        this.metadata = JSON.parse(data.toString())
+        console.debug(`Loaded metadata for ${Object.keys(this.metadata.chunks).length} cached chunks`)
+      }
+    } catch (error) {
+      console.warn('Failed to load chunk cache metadata:', error)
+      this.metadata = { chunks: {} }
+    }
+  }
+
+  /**
+   * Save metadata to disk (debounced)
+   */
+  private scheduleSaveMetadata (): void {
+    this.metadataDirty = true
+
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+    }
+
+    this.saveMetadataTimeout = setTimeout(() => {
+      void this.saveMetadata()
+    }, 1000)
+  }
+
+  /**
+   * Save metadata to disk immediately
+   */
+  private async saveMetadata (): Promise<void> {
+    if (!this.metadataDirty) return
+
+    try {
+      await mkdirRecursive(this.getServerDir())
+      await fs.promises.writeFile(
+        this.getMetadataPath(),
+        JSON.stringify(this.metadata, null, 2)
+      )
+      this.metadataDirty = false
+    } catch (error) {
+      console.warn('Failed to save chunk cache metadata:', error)
+    }
+  }
+
+  /**
+   * Get full cache key for memory cache
+   */
+  private getMemoryCacheKey (x: number, z: number): string {
     return `${this.serverAddress}:${x},${z}`
   }
 
@@ -115,83 +186,69 @@ class ChunkPacketCache {
   async getCachedChunksInfo (): Promise<CachedChunkInfo[]> {
     const result: CachedChunkInfo[] = []
 
-    // First check memory cache
-    const serverPrefix = `${this.serverAddress}:`
-    for (const [key, cached] of this.memoryCache.entries()) {
-      if (key.startsWith(serverPrefix)) {
-        const [x, z] = cached.chunkKey.split(',').map(Number)
-        result.push({ x, z, hash: cached.hash })
-      }
-    }
-
-    // Then check IndexedDB if available
-    if (this.db) {
-      try {
-        const dbChunks = await this.getChunksFromIndexedDB()
-        for (const cached of dbChunks) {
-          // Avoid duplicates from memory cache
-          const exists = result.some(c => c.x === Number(cached.chunkKey.split(',')[0])
-            && c.z === Number(cached.chunkKey.split(',')[1]))
-          if (!exists) {
-            const [x, z] = cached.chunkKey.split(',').map(Number)
-            result.push({ x, z, hash: cached.hash })
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to get cached chunks from IndexedDB:', error)
+    for (const [chunkKey, meta] of Object.entries(this.metadata.chunks)) {
+      const [x, z] = chunkKey.split(',').map(Number)
+      if (!Number.isNaN(x) && !Number.isNaN(z)) {
+        result.push({ x, z, hash: meta.hash })
       }
     }
 
     return result
   }
 
-  private async getChunksFromIndexedDB (): Promise<CachedChunkPacket[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve([])
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readonly')
-      const store = transaction.objectStore(STORE_NAME)
-      const index = store.index('serverAddress')
-      const request = index.getAll(IDBKeyRange.only(this.serverAddress))
-
-      request.onsuccess = () => resolve(request.result || [])
-      request.onerror = () => reject(request.error)
-    })
-  }
-
   /**
    * Get cached packet data for a chunk
    */
   async get (x: number, z: number): Promise<{ packetData: ArrayBuffer; hash: string } | null> {
-    const cacheKey = this.getCacheKey(x, z)
+    const memKey = this.getMemoryCacheKey(x, z)
     const chunkKey = `${x},${z}`
 
     // Check memory cache first
-    const memCached = this.memoryCache.get(cacheKey)
+    const memCached = this.memoryCache.get(memKey)
     if (memCached) {
       memCached.lastAccessed = Date.now()
+      this.metadata.chunks[chunkKey] = {
+        hash: memCached.hash,
+        lastAccessed: memCached.lastAccessed
+      }
+      this.scheduleSaveMetadata()
       return { packetData: memCached.packetData, hash: memCached.hash }
     }
 
-    // Check IndexedDB if available
-    if (this.db) {
-      try {
-        const cached = await this.getFromIndexedDB(chunkKey)
-        if (cached && cached.serverAddress === this.serverAddress) {
-          // Update last accessed and add to memory cache
-          cached.lastAccessed = Date.now()
-          await this.saveToIndexedDB(cached)
-          this.addToMemoryCache(cacheKey, cached)
-          return { packetData: cached.packetData, hash: cached.hash }
+    // Check if we have metadata for this chunk
+    const meta = this.metadata.chunks[chunkKey]
+    if (!meta) return null
+
+    // Try to load from disk
+    try {
+      const chunkPath = this.getChunkPath(x, z)
+      if (await existsViaStats(chunkPath)) {
+        const data = await fs.promises.readFile(chunkPath)
+        const packetData = new Uint8Array(data).buffer
+
+        // Update last accessed
+        meta.lastAccessed = Date.now()
+        this.scheduleSaveMetadata()
+
+        // Add to memory cache
+        const cached: CachedChunkPacket = {
+          chunkKey,
+          hash: meta.hash,
+          packetData,
+          lastAccessed: meta.lastAccessed,
+          serverAddress: this.serverAddress
         }
-      } catch (error) {
-        console.warn('Failed to get packet from IndexedDB:', error)
+        this.addToMemoryCache(memKey, cached)
+
+        return { packetData, hash: meta.hash }
       }
+    } catch (error) {
+      console.warn(`Failed to load chunk ${chunkKey} from disk:`, error)
     }
 
+    // File doesn't exist, clean up metadata
+    delete this.metadata.chunks[chunkKey]
+    this.scheduleSaveMetadata()
     return null
   }
 
@@ -199,28 +256,40 @@ class ChunkPacketCache {
    * Store packet data in cache
    */
   async set (x: number, z: number, packetData: ArrayBuffer, hash?: string): Promise<void> {
-    const cacheKey = this.getCacheKey(x, z)
+    const memKey = this.getMemoryCacheKey(x, z)
     const chunkKey = `${x},${z}`
     const computedHash = hash || this.computePacketHash(packetData)
+    const now = Date.now()
 
     const cached: CachedChunkPacket = {
       chunkKey,
       hash: computedHash,
       packetData,
-      lastAccessed: Date.now(),
+      lastAccessed: now,
       serverAddress: this.serverAddress
     }
 
     // Always add to memory cache
-    this.addToMemoryCache(cacheKey, cached)
+    this.addToMemoryCache(memKey, cached)
 
-    // Persist to IndexedDB if server supports channel
-    if (this.serverSupportsChannel && this.db) {
+    // Update metadata
+    this.metadata.chunks[chunkKey] = {
+      hash: computedHash,
+      lastAccessed: now
+    }
+
+    // Persist to disk if server supports channel
+    if (this.serverSupportsChannel) {
       try {
-        await this.saveToIndexedDB(cached)
+        await mkdirRecursive(this.getServerDir())
+        await fs.promises.writeFile(
+          this.getChunkPath(x, z),
+          Buffer.from(packetData)
+        )
         await this.evictOldEntries()
+        this.scheduleSaveMetadata()
       } catch (error) {
-        console.warn('Failed to save packet to IndexedDB:', error)
+        console.warn(`Failed to save chunk ${chunkKey} to disk:`, error)
       }
     }
   }
@@ -229,25 +298,29 @@ class ChunkPacketCache {
    * Check if a chunk is cached with the given hash
    */
   async hasValidCache (x: number, z: number, expectedHash: string): Promise<boolean> {
-    const cached = await this.get(x, z)
-    return cached !== null && cached.hash === expectedHash
+    const chunkKey = `${x},${z}`
+    const meta = this.metadata.chunks[chunkKey]
+    return meta !== undefined && meta.hash === expectedHash
   }
 
   /**
    * Invalidate cache for a specific chunk
    */
   async invalidate (x: number, z: number): Promise<void> {
-    const cacheKey = this.getCacheKey(x, z)
+    const memKey = this.getMemoryCacheKey(x, z)
     const chunkKey = `${x},${z}`
 
-    this.memoryCache.delete(cacheKey)
+    this.memoryCache.delete(memKey)
+    delete this.metadata.chunks[chunkKey]
+    this.scheduleSaveMetadata()
 
-    if (this.db) {
-      try {
-        await this.deleteFromIndexedDB(chunkKey)
-      } catch (error) {
-        console.warn('Failed to delete packet from IndexedDB:', error)
+    try {
+      const chunkPath = this.getChunkPath(x, z)
+      if (await existsViaStats(chunkPath)) {
+        await fs.promises.unlink(chunkPath)
       }
+    } catch (error) {
+      console.warn(`Failed to delete chunk ${chunkKey} from disk:`, error)
     }
   }
 
@@ -255,6 +328,7 @@ class ChunkPacketCache {
    * Clear all cached packets for current server
    */
   async clear (): Promise<void> {
+    // Clear memory cache for current server
     const serverPrefix = `${this.serverAddress}:`
     for (const key of this.memoryCache.keys()) {
       if (key.startsWith(serverPrefix)) {
@@ -262,19 +336,28 @@ class ChunkPacketCache {
       }
     }
 
-    if (this.db) {
-      try {
-        await this.clearIndexedDBForServer()
-      } catch (error) {
-        console.warn('Failed to clear IndexedDB:', error)
+    // Clear metadata
+    this.metadata = { chunks: {} }
+
+    // Delete server directory
+    try {
+      const serverDir = this.getServerDir()
+      if (await existsViaStats(serverDir)) {
+        const files = await fs.promises.readdir(serverDir)
+        await Promise.all(files.map(async (file) => {
+          await fs.promises.unlink(join(serverDir, file))
+        }))
+        await fs.promises.rmdir(serverDir)
       }
+    } catch (error) {
+      console.warn('Failed to clear chunk cache directory:', error)
     }
   }
 
   private addToMemoryCache (key: string, entry: CachedChunkPacket): void {
     this.memoryCache.set(key, entry)
 
-    // Evict oldest entries if cache is full
+    // Evict oldest entries if memory cache is full
     if (this.memoryCache.size > MAX_CACHE_SIZE / 2) {
       const entries = [...this.memoryCache.entries()]
       entries.sort((a, b) => a[1].lastAccessed - b[1].lastAccessed)
@@ -286,127 +369,65 @@ class ChunkPacketCache {
     }
   }
 
-  private async getFromIndexedDB (chunkKey: string): Promise<CachedChunkPacket | null> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve(null)
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readonly')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.get(chunkKey)
-
-      request.onsuccess = () => resolve(request.result || null)
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async saveToIndexedDB (entry: CachedChunkPacket): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.put(entry)
-
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async deleteFromIndexedDB (chunkKey: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.delete(chunkKey)
-
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async clearIndexedDBForServer (): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const index = store.index('serverAddress')
-      const cursorRequest = index.openCursor(IDBKeyRange.only(this.serverAddress))
-
-      cursorRequest.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
-        if (cursor) {
-          cursor.delete()
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
-
-      cursorRequest.onerror = () => reject(cursorRequest.error)
-    })
-  }
-
+  /**
+   * Evict old entries when cache exceeds max size
+   */
   private async evictOldEntries (): Promise<void> {
-    if (!this.db) return
+    const chunkCount = Object.keys(this.metadata.chunks).length
+    if (chunkCount <= MAX_CACHE_SIZE) return
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const countRequest = store.count()
+    // Sort by lastAccessed and remove oldest
+    const entries = Object.entries(this.metadata.chunks)
+      .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed)
 
-      countRequest.onsuccess = () => {
-        const count = countRequest.result
-        if (count <= MAX_CACHE_SIZE) {
-          resolve()
-          return
+    const toDelete = chunkCount - MAX_CACHE_SIZE + Math.floor(MAX_CACHE_SIZE * 0.1)
+
+    for (let i = 0; i < toDelete && i < entries.length; i++) {
+      const [chunkKey] = entries[i]
+      const [x, z] = chunkKey.split(',').map(Number)
+
+      // Remove from memory cache
+      const memKey = this.getMemoryCacheKey(x, z)
+      this.memoryCache.delete(memKey)
+
+      // Remove from metadata
+      delete this.metadata.chunks[chunkKey]
+
+      // Delete file
+      try {
+        const chunkPath = this.getChunkPath(x, z)
+        if (await existsViaStats(chunkPath)) {
+          await fs.promises.unlink(chunkPath)
         }
-
-        const index = store.index('lastAccessed')
-        const cursorRequest = index.openCursor()
-        let deleted = 0
-        const toDelete = count - MAX_CACHE_SIZE + Math.floor(MAX_CACHE_SIZE * 0.1)
-
-        cursorRequest.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
-          if (cursor && deleted < toDelete) {
-            cursor.delete()
-            deleted++
-            cursor.continue()
-          } else {
-            resolve()
-          }
-        }
-
-        cursorRequest.onerror = () => reject(cursorRequest.error)
+      } catch (error) {
+        // Ignore deletion errors
       }
+    }
 
-      countRequest.onerror = () => reject(countRequest.error)
-    })
+    console.debug(`Evicted ${toDelete} old chunks from cache`)
   }
 
   /**
    * Get cache statistics
    */
-  getStats (): { memorySize: number; supportsChannel: boolean; serverAddress: string } {
+  getStats (): { memorySize: number; diskSize: number; supportsChannel: boolean; serverAddress: string } {
     return {
       memorySize: this.memoryCache.size,
+      diskSize: Object.keys(this.metadata.chunks).length,
       supportsChannel: this.serverSupportsChannel,
       serverAddress: this.serverAddress
     }
+  }
+
+  /**
+   * Flush any pending metadata saves
+   */
+  async flush (): Promise<void> {
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+      this.saveMetadataTimeout = null
+    }
+    await this.saveMetadata()
   }
 }
 

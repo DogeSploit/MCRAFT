@@ -772,7 +772,7 @@ const registerChunkCacheChannel = () => {
     })
 
     // Set up cache with server info
-    chunkPacketCache.setServerInfo(serverAddress, true)
+    void chunkPacketCache.setServerInfo(serverAddress, true)
     chunkGeometryCache.setServerSupportsChannel(true, serverAddress)
 
     // Send cached chunks list to server
@@ -782,7 +782,7 @@ const registerChunkCacheChannel = () => {
   } catch (error) {
     // Server doesn't support the channel - use memory-only cache
     console.debug('Server does not support chunk-cache channel - using memory-only cache')
-    chunkPacketCache.setServerInfo(serverAddress, false)
+    void chunkPacketCache.setServerInfo(serverAddress, false)
     chunkGeometryCache.setServerSupportsChannel(false, serverAddress)
   }
 
