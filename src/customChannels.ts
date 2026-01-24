@@ -700,10 +700,33 @@ const registerChunkCacheChannel = () => {
   ]
 
   // Track pending chunk hashes from server (for chunks we'll receive via map_chunk)
-  const pendingChunkHashes = new Map<string, string>()
+  // Stores {hash, timestamp} to enable TTL-based cleanup
+  const pendingChunkHashes = new Map<string, { hash: string; timestamp: number }>()
+  const PENDING_HASH_TTL = 30_000 // 30 seconds TTL for pending hashes
 
   // Track whether server supports the channel (detected via custom_payload)
   let serverSupportsChannel = false
+
+  // Cleanup pending hashes on disconnect to prevent memory leaks
+  bot.once('end', () => {
+    pendingChunkHashes.clear()
+  })
+
+  // Periodic cleanup of stale pending hashes
+  const cleanupInterval = setInterval(() => {
+    const now = Date.now()
+    for (const [key, value] of pendingChunkHashes) {
+      if (now - value.timestamp > PENDING_HASH_TTL) {
+        pendingChunkHashes.delete(key)
+        console.debug(`Expired pending hash for chunk ${key}`)
+      }
+    }
+  }, 10_000) // Check every 10 seconds
+
+  // Stop cleanup interval when bot ends
+  bot.once('end', () => {
+    clearInterval(cleanupInterval)
+  })
 
   // Initialize caches with server support = false by default
   void chunkPacketCache.setServerInfo(serverAddress, false)
@@ -776,8 +799,8 @@ const registerChunkCacheChannel = () => {
         requestChunkResend(data.x, data.z)
       }
     } else if (data.hash) {
-      // Server will send map_chunk next - store hash for caching
-      pendingChunkHashes.set(chunkKey, data.hash)
+      // Server will send map_chunk next - store hash for caching with timestamp
+      pendingChunkHashes.set(chunkKey, { hash: data.hash, timestamp: Date.now() })
       console.debug(`Expecting map_chunk for ${chunkKey} with hash ${data.hash}`)
     }
   })
@@ -787,17 +810,17 @@ const registerChunkCacheChannel = () => {
     if (meta.name !== 'map_chunk') return
 
     const chunkKey = `${packetData.x},${packetData.z}`
-    const pendingHash = pendingChunkHashes.get(chunkKey)
+    const pending = pendingChunkHashes.get(chunkKey)
 
-    if (pendingHash) {
+    if (pending) {
       // We have a hash from the server - cache this chunk
       pendingChunkHashes.delete(chunkKey)
 
       try {
         // Serialize the packet data for caching
         const serialized = serializeMapChunkPacket(packetData)
-        await chunkPacketCache.set(packetData.x, packetData.z, serialized, pendingHash)
-        console.debug(`Cached map_chunk for ${chunkKey} with hash ${pendingHash}`)
+        await chunkPacketCache.set(packetData.x, packetData.z, serialized, pending.hash)
+        console.debug(`Cached map_chunk for ${chunkKey} with hash ${pending.hash}`)
       } catch (error) {
         console.warn(`Failed to cache chunk ${chunkKey}:`, error)
       }
