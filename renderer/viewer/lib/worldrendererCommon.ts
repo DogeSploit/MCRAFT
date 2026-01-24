@@ -565,6 +565,9 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
       worker.terminate()
     }
     this.workers = []
+
+    // Clear cached block states to prevent leaks between sessions
+    clearAllBlockStates()
   }
 
   async resetWorkers () {
@@ -1125,6 +1128,9 @@ export abstract class WorldRendererCommon<WorkerSend = any, WorkerReceive = any>
     this.renderUpdateEmitter.removeAllListeners()
     this.abortController.abort()
     removeAllStats()
+
+    // Clear cached block states
+    clearAllBlockStates()
   }
 }
 

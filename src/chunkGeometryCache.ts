@@ -2,17 +2,22 @@
  * Chunk Geometry Cache Manager
  *
  * Provides long-term caching of chunk geometry to improve performance when revisiting areas.
- * - For servers that register chunk-cache channel: uses IndexedDB for persistent storage
- * - Otherwise: uses in-memory caching with hash comparison for quick access
+ * Uses browserfs + fs file storage for persistent caching.
+ *
+ * Storage structure: /data/geometry-cache/{serverAddress}/{x},{y},{z}.bin
+ * Metadata stored in: /data/geometry-cache/{serverAddress}/metadata.json
  */
 
+import fs from 'fs'
+import { join } from 'path'
+import sanitize from 'sanitize-filename'
+import { mkdirRecursive, existsViaStats } from './browserfs'
 import type { MesherGeometryOutput } from '../renderer/viewer/lib/mesher/shared'
 
-const DB_NAME = 'minecraft-web-client-chunk-cache'
-const DB_VERSION = 1
-const STORE_NAME = 'chunk-geometry'
+const CACHE_BASE = '/data/geometry-cache'
 const MAX_CACHE_SIZE = 500
 const MAX_MEMORY_CACHE_SIZE = 100
+const METADATA_FILE = 'metadata.json'
 
 export interface CachedGeometry {
   sectionKey: string
@@ -48,60 +53,120 @@ export interface SerializedGeometry {
   customBlockModels?: Record<string, string>
 }
 
+interface GeometryMetadata {
+  blockHash: string
+  lastAccessed: number
+}
+
+interface ServerMetadata {
+  sections: Record<string, GeometryMetadata> // key is "x,y,z"
+}
+
 class ChunkGeometryCache {
-  private db: IDBDatabase | null = null
   private readonly memoryCache = new Map<string, CachedGeometry>()
   private serverSupportsChannel = false
-  private serverAddress: string | undefined
-  private initPromise: Promise<void> | null = null
+  private serverAddress = 'unknown'
+  private metadata: ServerMetadata = { sections: {} }
+  private metadataDirty = false
+  private saveMetadataTimeout: ReturnType<typeof setTimeout> | null = null
 
   /**
    * Initialize the cache system
    */
   async init (): Promise<void> {
-    if (this.initPromise) return this.initPromise
-
-    this.initPromise = this.openDatabase()
-    return this.initPromise
+    try {
+      await mkdirRecursive(CACHE_BASE)
+      console.debug('Geometry cache initialized')
+    } catch (error) {
+      console.warn('Failed to initialize geometry cache:', error)
+    }
   }
 
-  private async openDatabase (): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION)
+  /**
+   * Get sanitized server directory name
+   */
+  private getServerDir (): string {
+    const sanitized = sanitize(this.serverAddress.replace(/[/:]/g, '_'))
+    return join(CACHE_BASE, sanitized || 'unknown')
+  }
 
-      request.onerror = () => {
-        console.warn('Failed to open chunk cache database:', request.error)
-        // Fall back to memory-only cache
-        resolve()
-      }
+  /**
+   * Get section file path
+   */
+  private getSectionPath (x: number, y: number, z: number): string {
+    return join(this.getServerDir(), `${x},${y},${z}.bin`)
+  }
 
-      request.onsuccess = () => {
-        this.db = request.result
-        console.debug('Chunk cache database opened successfully')
-        resolve()
-      }
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          const store = db.createObjectStore(STORE_NAME, { keyPath: 'sectionKey' })
-          store.createIndex('chunkKey', 'chunkKey', { unique: false })
-          store.createIndex('lastAccessed', 'lastAccessed', { unique: false })
-          store.createIndex('serverAddress', 'serverAddress', { unique: false })
-          console.debug('Chunk cache object store created')
-        }
-      }
-    })
+  /**
+   * Get metadata file path
+   */
+  private getMetadataPath (): string {
+    return join(this.getServerDir(), METADATA_FILE)
   }
 
   /**
    * Set whether the server supports the chunk-cache channel
    */
-  setServerSupportsChannel (supports: boolean, serverAddress?: string): void {
+  async setServerSupportsChannel (supports: boolean, serverAddress?: string): Promise<void> {
     this.serverSupportsChannel = supports
-    this.serverAddress = serverAddress
-    console.debug(`Server ${supports ? 'supports' : 'does not support'} chunk-cache channel`)
+    this.serverAddress = serverAddress || 'unknown'
+    this.memoryCache.clear()
+    this.metadata = { sections: {} }
+
+    console.debug(`Geometry cache: server=${this.serverAddress}, supportsChannel=${supports}`)
+
+    // Load existing metadata for this server
+    await this.loadMetadata()
+  }
+
+  /**
+   * Load metadata from disk
+   */
+  private async loadMetadata (): Promise<void> {
+    try {
+      const metadataPath = this.getMetadataPath()
+      if (await existsViaStats(metadataPath)) {
+        const data = await fs.promises.readFile(metadataPath)
+        this.metadata = JSON.parse(data.toString())
+        console.debug(`Loaded geometry metadata for ${Object.keys(this.metadata.sections).length} cached sections`)
+      }
+    } catch (error) {
+      console.warn('Failed to load geometry cache metadata:', error)
+      this.metadata = { sections: {} }
+    }
+  }
+
+  /**
+   * Save metadata to disk (debounced)
+   */
+  private scheduleSaveMetadata (): void {
+    this.metadataDirty = true
+
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+    }
+
+    this.saveMetadataTimeout = setTimeout(() => {
+      void this.saveMetadata()
+    }, 1000)
+  }
+
+  /**
+   * Save metadata to disk immediately
+   */
+  private async saveMetadata (): Promise<void> {
+    if (!this.metadataDirty) return
+
+    try {
+      await mkdirRecursive(this.getServerDir())
+      await fs.promises.writeFile(
+        this.getMetadataPath(),
+        JSON.stringify(this.metadata, null, 2)
+      )
+      this.metadataDirty = false
+    } catch (error) {
+      console.warn('Failed to save geometry cache metadata:', error)
+    }
   }
 
   /**
@@ -135,10 +200,10 @@ class ChunkGeometryCache {
   }
 
   /**
-   * Create a cache key from section coordinates
+   * Get full cache key for memory cache
    */
-  private getCacheKey (x: number, y: number, z: number): string {
-    return `${this.serverAddress || 'local'}:${x},${y},${z}`
+  private getMemoryCacheKey (x: number, y: number, z: number): string {
+    return `${this.serverAddress}:${x},${y},${z}`
   }
 
   /**
@@ -205,35 +270,57 @@ class ChunkGeometryCache {
    * Get cached geometry by section key and block hash
    */
   async get (x: number, y: number, z: number, blockHash: string): Promise<MesherGeometryOutput | null> {
-    const cacheKey = this.getCacheKey(x, y, z)
+    const memKey = this.getMemoryCacheKey(x, y, z)
     const sectionKey = `${x},${y},${z}`
 
     // Check memory cache first
-    const memCached = this.memoryCache.get(cacheKey)
+    const memCached = this.memoryCache.get(memKey)
     if (memCached && memCached.blockHash === blockHash) {
       memCached.lastAccessed = Date.now()
+      this.metadata.sections[sectionKey] = {
+        blockHash: memCached.blockHash,
+        lastAccessed: memCached.lastAccessed
+      }
+      this.scheduleSaveMetadata()
       return this.deserializeGeometry(memCached.geometry)
     }
 
-    // For servers with channel support, check IndexedDB
-    if (this.serverSupportsChannel && this.db) {
-      try {
-        const cached = await this.getFromIndexedDB(sectionKey)
-        if (cached && cached.blockHash === blockHash) {
-          // Update last accessed time
-          cached.lastAccessed = Date.now()
-          await this.saveToIndexedDB(cached)
+    // Check if we have metadata for this section
+    const meta = this.metadata.sections[sectionKey]
+    if (!meta || meta.blockHash !== blockHash) return null
 
-          // Also cache in memory for faster access
-          this.addToMemoryCache(cacheKey, cached)
+    // Try to load from disk
+    try {
+      const sectionPath = this.getSectionPath(x, y, z)
+      if (await existsViaStats(sectionPath)) {
+        const data = await fs.promises.readFile(sectionPath)
+        const cached: CachedGeometry = JSON.parse(data.toString())
 
-          return this.deserializeGeometry(cached.geometry)
+        // Verify hash matches
+        if (cached.blockHash !== blockHash) {
+          // Hash mismatch, invalidate
+          delete this.metadata.sections[sectionKey]
+          this.scheduleSaveMetadata()
+          return null
         }
-      } catch (error) {
-        console.warn('Failed to get geometry from IndexedDB:', error)
+
+        // Update last accessed
+        cached.lastAccessed = Date.now()
+        meta.lastAccessed = cached.lastAccessed
+        this.scheduleSaveMetadata()
+
+        // Add to memory cache
+        this.addToMemoryCache(memKey, cached)
+
+        return this.deserializeGeometry(cached.geometry)
       }
+    } catch (error) {
+      console.warn(`Failed to load geometry ${sectionKey} from disk:`, error)
     }
 
+    // File doesn't exist or failed to load, clean up metadata
+    delete this.metadata.sections[sectionKey]
+    this.scheduleSaveMetadata()
     return null
   }
 
@@ -247,29 +334,41 @@ class ChunkGeometryCache {
     blockHash: string,
     geometry: MesherGeometryOutput
   ): Promise<void> {
-    const cacheKey = this.getCacheKey(x, y, z)
+    const memKey = this.getMemoryCacheKey(x, y, z)
     const sectionKey = `${x},${y},${z}`
     const chunkKey = `${x},${z}`
+    const now = Date.now()
 
     const cachedGeometry: CachedGeometry = {
       sectionKey,
       chunkKey,
       blockHash,
       geometry: this.serializeGeometry(geometry),
-      lastAccessed: Date.now(),
+      lastAccessed: now,
       serverAddress: this.serverAddress
     }
 
     // Always add to memory cache
-    this.addToMemoryCache(cacheKey, cachedGeometry)
+    this.addToMemoryCache(memKey, cachedGeometry)
 
-    // For servers with channel support, also persist to IndexedDB
-    if (this.serverSupportsChannel && this.db) {
+    // Update metadata
+    this.metadata.sections[sectionKey] = {
+      blockHash,
+      lastAccessed: now
+    }
+
+    // Persist to disk if server supports channel
+    if (this.serverSupportsChannel) {
       try {
-        await this.saveToIndexedDB(cachedGeometry)
+        await mkdirRecursive(this.getServerDir())
+        await fs.promises.writeFile(
+          this.getSectionPath(x, y, z),
+          JSON.stringify(cachedGeometry)
+        )
         await this.evictOldEntries()
+        this.scheduleSaveMetadata()
       } catch (error) {
-        console.warn('Failed to save geometry to IndexedDB:', error)
+        console.warn(`Failed to save geometry ${sectionKey} to disk:`, error)
       }
     }
   }
@@ -278,19 +377,20 @@ class ChunkGeometryCache {
    * Invalidate cache for a specific section
    */
   async invalidate (x: number, y: number, z: number): Promise<void> {
-    const cacheKey = this.getCacheKey(x, y, z)
+    const memKey = this.getMemoryCacheKey(x, y, z)
     const sectionKey = `${x},${y},${z}`
 
-    // Remove from memory cache
-    this.memoryCache.delete(cacheKey)
+    this.memoryCache.delete(memKey)
+    delete this.metadata.sections[sectionKey]
+    this.scheduleSaveMetadata()
 
-    // Remove from IndexedDB if available
-    if (this.serverSupportsChannel && this.db) {
-      try {
-        await this.deleteFromIndexedDB(sectionKey)
-      } catch (error) {
-        console.warn('Failed to delete geometry from IndexedDB:', error)
+    try {
+      const sectionPath = this.getSectionPath(x, y, z)
+      if (await existsViaStats(sectionPath)) {
+        await fs.promises.unlink(sectionPath)
       }
+    } catch (error) {
+      console.warn(`Failed to delete geometry ${sectionKey} from disk:`, error)
     }
   }
 
@@ -298,21 +398,29 @@ class ChunkGeometryCache {
    * Clear all cached geometry for the current server
    */
   async clear (): Promise<void> {
-    // Clear memory cache entries for current server only
-    const serverPrefix = `${this.serverAddress || 'local'}:`
+    // Clear memory cache for current server
+    const serverPrefix = `${this.serverAddress}:`
     for (const key of this.memoryCache.keys()) {
       if (key.startsWith(serverPrefix)) {
         this.memoryCache.delete(key)
       }
     }
 
-    // Clear IndexedDB entries for current server
-    if (this.db) {
-      try {
-        await this.clearIndexedDBForServer()
-      } catch (error) {
-        console.warn('Failed to clear IndexedDB:', error)
+    // Clear metadata
+    this.metadata = { sections: {} }
+
+    // Delete server directory
+    try {
+      const serverDir = this.getServerDir()
+      if (await existsViaStats(serverDir)) {
+        const files = await fs.promises.readdir(serverDir)
+        await Promise.all(files.map(async (file) => {
+          await fs.promises.unlink(join(serverDir, file))
+        }))
+        await fs.promises.rmdir(serverDir)
       }
+    } catch (error) {
+      console.warn('Failed to clear geometry cache directory:', error)
     }
   }
 
@@ -335,130 +443,65 @@ class ChunkGeometryCache {
     }
   }
 
-  private async getFromIndexedDB (sectionKey: string): Promise<CachedGeometry | null> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve(null)
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readonly')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.get(sectionKey)
-
-      request.onsuccess = () => resolve(request.result || null)
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async saveToIndexedDB (entry: CachedGeometry): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.put(entry)
-
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async deleteFromIndexedDB (sectionKey: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const request = store.delete(sectionKey)
-
-      request.onsuccess = () => resolve()
-      request.onerror = () => reject(request.error)
-    })
-  }
-
-  private async clearIndexedDBForServer (): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        resolve()
-        return
-      }
-
-      const transaction = this.db.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const index = store.index('serverAddress')
-      const serverAddr = this.serverAddress
-
-      // Use cursor to delete only entries for current server
-      const cursorRequest = index.openCursor(IDBKeyRange.only(serverAddr))
-
-      cursorRequest.onsuccess = (event) => {
-        const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
-        if (cursor) {
-          cursor.delete()
-          cursor.continue()
-        } else {
-          resolve()
-        }
-      }
-
-      cursorRequest.onerror = () => reject(cursorRequest.error)
-    })
-  }
-
+  /**
+   * Evict old entries when cache exceeds max size
+   */
   private async evictOldEntries (): Promise<void> {
-    if (!this.db) return
+    const sectionCount = Object.keys(this.metadata.sections).length
+    if (sectionCount <= MAX_CACHE_SIZE) return
 
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(STORE_NAME)
-      const countRequest = store.count()
+    // Sort by lastAccessed and remove oldest
+    const entries = Object.entries(this.metadata.sections)
+      .sort((a, b) => a[1].lastAccessed - b[1].lastAccessed)
 
-      countRequest.onsuccess = () => {
-        const count = countRequest.result
-        if (count <= MAX_CACHE_SIZE) {
-          resolve()
-          return
+    const toDelete = sectionCount - MAX_CACHE_SIZE + Math.floor(MAX_CACHE_SIZE * 0.1)
+
+    for (let i = 0; i < toDelete && i < entries.length; i++) {
+      const [sectionKey] = entries[i]
+      const [x, y, z] = sectionKey.split(',').map(Number)
+
+      // Remove from memory cache
+      const memKey = this.getMemoryCacheKey(x, y, z)
+      this.memoryCache.delete(memKey)
+
+      // Remove from metadata
+      delete this.metadata.sections[sectionKey]
+
+      // Delete file
+      try {
+        const sectionPath = this.getSectionPath(x, y, z)
+        if (await existsViaStats(sectionPath)) {
+          await fs.promises.unlink(sectionPath)
         }
-
-        // Get all entries sorted by lastAccessed
-        const index = store.index('lastAccessed')
-        const cursorRequest = index.openCursor()
-        let deleted = 0
-        const toDelete = count - MAX_CACHE_SIZE + Math.floor(MAX_CACHE_SIZE * 0.1)
-
-        cursorRequest.onsuccess = (event) => {
-          const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result
-          if (cursor && deleted < toDelete) {
-            cursor.delete()
-            deleted++
-            cursor.continue()
-          } else {
-            resolve()
-          }
-        }
-
-        cursorRequest.onerror = () => reject(cursorRequest.error)
+      } catch (error) {
+        // Ignore deletion errors
       }
+    }
 
-      countRequest.onerror = () => reject(countRequest.error)
-    })
+    console.debug(`Evicted ${toDelete} old geometry entries from cache`)
   }
 
   /**
    * Get cache statistics
    */
-  getStats (): { memorySize: number; supportsChannel: boolean } {
+  getStats (): { memorySize: number; diskSize: number; supportsChannel: boolean; serverAddress: string } {
     return {
       memorySize: this.memoryCache.size,
-      supportsChannel: this.serverSupportsChannel
+      diskSize: Object.keys(this.metadata.sections).length,
+      supportsChannel: this.serverSupportsChannel,
+      serverAddress: this.serverAddress
     }
+  }
+
+  /**
+   * Flush any pending metadata saves
+   */
+  async flush (): Promise<void> {
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+      this.saveMetadataTimeout = null
+    }
+    await this.saveMetadata()
   }
 }
 
