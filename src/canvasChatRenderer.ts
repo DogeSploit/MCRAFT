@@ -2,7 +2,9 @@ import { getColorShadow, messageFormatStylesMap } from './react/MessageFormatted
 import { getCanvasChatMessages, getMessageOpacity, getChatLayout, updateMessageAnimation, CanvasChatMessage } from './canvasChatMessages'
 import type { MessageFormatPart } from './chatUtils'
 
-export { ChatRenderCanvas, setChatLayout } from './canvasChatMessages'
+
+// Config flag - set to true to render chat on canvas for recordings
+export const ChatRenderCanvas = false
 
 // Rendering constants
 const BASE_FONT_SIZE = 16

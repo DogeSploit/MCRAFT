@@ -1,9 +1,6 @@
 import type { MessageFormatPart } from './chatUtils'
 import { isGamePaused } from './iframe'
 
-// Config flag - set to true to render chat on canvas for recordings
-export const ChatRenderCanvas = true
-
 // Layout types
 export type ChatLayout = 'minecraft' | 'stacked'
 let currentLayout: ChatLayout = 'stacked'
