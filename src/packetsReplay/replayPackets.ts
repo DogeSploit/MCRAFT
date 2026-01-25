@@ -80,6 +80,32 @@ export async function openMcprFile(
   }
 }
 
+/**
+ * Open a pre-parsed replay (from gzipped msgpack)
+ * @param packets - Pre-parsed packets array
+ * @param header - Replay header with metadata
+ * @param filename - The filename for display
+ * @param filesize - The file size for display
+ */
+export async function openParsedReplay(
+  packets: ParsedReplayPacket[],
+  header: any,
+  filename: string = 'unnamed',
+  filesize?: number
+) {
+  console.log('openParsedReplay - received', packets.length, 'packets, version:', header.minecraftVersion)
+
+  packetsReplayState.replayName = `${filename} (${getFixedFilesize(filesize ?? packets.length * 100)})`
+  packetsReplayState.isPlaying = false
+
+  const connectOptions = {
+    worldStateFileContents: '',
+    username: 'KradleWebViewer',
+    mcprReplayData: { packets, header }
+  }
+  dispatchEvent(new CustomEvent('connect', { detail: connectOptions }))
+}
+
 // Overloads
 export function startLocalReplayServer(packets: ParsedReplayPacket[], header: any): { server: any, version: string }
 export function startLocalReplayServer(contents: string): { server: any, version: string }

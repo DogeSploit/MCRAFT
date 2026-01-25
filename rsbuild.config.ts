@@ -147,7 +147,7 @@ const appConfig = defineConfig({
         publicDir: {
             name: 'dist',
         },
-        port: 3333,
+        port: 3003,
         proxy: {
             '/api': 'http://localhost:8080',
         },
