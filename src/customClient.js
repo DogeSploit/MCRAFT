@@ -9,7 +9,7 @@ const states = require('minecraft-protocol/src/states')
  * Fields that minecraft-protocol's chat.js expects to be BigInt
  * for BigInt arithmetic operations (e.g., `BigInt(Date.now()) - packet.timestamp`)
  */
-const BIGINT_REQUIRED_FIELDS = ['timestamp', 'salt']
+const BIGINT_REQUIRED_FIELDS = ['timestamp', 'salt'] // eslint-disable-line unicorn/prefer-set-has
 
 /**
  * Convert a [high, low] int64 array (from msgpack) to BigInt

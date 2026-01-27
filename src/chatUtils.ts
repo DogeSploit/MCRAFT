@@ -123,10 +123,10 @@ export const formatMessage = (message: MessageInput, mcData: IndexedData = globa
     if (typeof msg.text !== 'string') return msg
     if (bracketStrippingDone) return msg // Only process at the start of the message
 
-    let text = msg.text
+    let { text } = msg
 
     // Handle case where <PlayerName> is all in one segment at the start
-    if (index === 0 && text.match(/^<[^>]+>/)) {
+    if (index === 0 && /^<[^>]+>/.test(text)) {
       text = text.replace(/^<([^>]+)>/, '$1')
       bracketStrippingDone = true
       return { ...msg, text }
