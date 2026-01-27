@@ -196,7 +196,12 @@ const addPacketToReplayer = (name: string, data, isFromClient: boolean, wasUpcom
   }
 }
 
-const IGNORE_SERVER_PACKETS = new Set(['kick_disconnect'])
+const IGNORE_SERVER_PACKETS = new Set([
+  'kick_disconnect',
+  'unload_chunk',         // Don't unload chunks during replay - keeps world visible
+  'respawn',              // Don't process respawn - can reset world state
+  'death_combat_event',   // Don't show death screen during replay
+])
 const ADDITIONAL_DELAY = 500
 
 /**
@@ -445,6 +450,11 @@ const mainPacketsReplayer = async (
   let lastSentPacket: { name: string, params: any } | null = null
 
   const playServerPacket = (name: string, params: any) => {
+    // Skip packets that would disrupt replay (chunk unloads, disconnects, etc.)
+    if (IGNORE_SERVER_PACKETS.has(name)) {
+      return
+    }
+
     try {
       writePacket(name, params)
       // Skip packet logging for MCPR replays to prevent memory leak
@@ -688,12 +698,10 @@ const mainPacketsReplayer = async (
   }
 
   // Process packets that are "due" based on elapsed time
-  let replayRunning = true
+  let replayFinished = false
 
   const processPacketsDue = () => {
-    if (!replayRunning) return
-
-    // Handle restart request
+    // Handle restart request - check this FIRST so it works even after replay finishes
     if (packetsReplayState.restartRequested) {
       packetsReplayState.restartRequested = false
 
@@ -715,10 +723,11 @@ const mainPacketsReplayer = async (
       pausedAt = 0
       packetsReplayState.progress.current = 0
       packetsReplayState.isPlaying = true
+      replayFinished = false
       console.log('Replay restarted')
     }
 
-    // Handle seek request
+    // Handle seek request - check this FIRST so it works even after replay finishes
     if (packetsReplayState.seekTargetMs !== null) {
       const targetMs = packetsReplayState.seekTargetMs
       packetsReplayState.seekTargetMs = null
@@ -746,10 +755,11 @@ const mainPacketsReplayer = async (
       packetsReplayState.progress.current = targetIndex
       packetsReplayState.isPlaying = true
       pausedAt = 0
+      replayFinished = false
     }
 
-    if (!packetsReplayState.isPlaying) {
-      // Track when we paused
+    // If paused or finished, track pause time and keep loop running for restart/seek
+    if (!packetsReplayState.isPlaying || replayFinished) {
       if (pausedAt === 0) {
         pausedAt = performance.now()
       }
@@ -810,10 +820,14 @@ const mainPacketsReplayer = async (
     }
 
     // Check if replay is complete
-    if (currentPacketIndex >= packetsWithTimestamp.length) {
-      replayRunning = false
+    if (currentPacketIndex >= packetsWithTimestamp.length && !replayFinished) {
+      replayFinished = true
       const finalColumnsCount = bot.world?.columns ? Object.keys(bot.world.columns).length : 0
       console.log(`Replay finished - chunks in world: ${finalColumnsCount}`)
+
+      // Pause the replay (keep entities and world visible)
+      packetsReplayState.isPlaying = false
+
       // Emit final status with 100% progress
       customEvents.emit('replayProgress', {
         currentTime: formatTime(totalReplayTime),
@@ -822,6 +836,8 @@ const mainPacketsReplayer = async (
         isPaused: true,
         totalDuration: totalReplayTime
       })
+      // Keep loop running for restart/seek
+      requestAnimationFrame(processPacketsDue)
       return
     }
 
