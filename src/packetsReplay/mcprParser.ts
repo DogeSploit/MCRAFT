@@ -6,6 +6,47 @@ import { UserError } from '../mineflayer/userError'
 import { setLoadingScreenStatus } from '../appStatus'
 
 /**
+ * Recursively convert BigInt values to regular numbers or strings.
+ * This is necessary for serialization and to avoid "Cannot mix BigInt" errors
+ * in most code paths.
+ *
+ * The customClient.js will convert timestamp/salt fields back to BigInt
+ * since minecraft-protocol's chat.js expects them as BigInt for arithmetic operations.
+ */
+function convertBigInt(data: any): any {
+  if (data === null || data === undefined) {
+    return data
+  }
+
+  if (typeof data === 'bigint') {
+    // Convert to number if within safe integer range, otherwise to string
+    if (data >= Number.MIN_SAFE_INTEGER && data <= Number.MAX_SAFE_INTEGER) {
+      return Number(data)
+    }
+    // For very large values, convert to string
+    return data.toString()
+  }
+
+  if (Buffer.isBuffer(data) || ArrayBuffer.isView(data)) {
+    return data // Keep buffers as-is, they're handled separately
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(convertBigInt)
+  }
+
+  if (typeof data === 'object') {
+    const result: any = {}
+    for (const key of Object.keys(data)) {
+      result[key] = convertBigInt(data[key])
+    }
+    return result
+  }
+
+  return data
+}
+
+/**
  * MCPR metadata structure from metaData.json
  */
 interface McprMetadata {
@@ -274,7 +315,7 @@ async function deserializePackets(
 
         deserializedPackets.push({
           name: packetName,
-          params: parsed.data.params,
+          params: convertBigInt(parsed.data.params),
           state: currentState, // Use actual current state
           diff: packet.diff,
           isFromServer: true

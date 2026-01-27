@@ -118,6 +118,11 @@ export function getCanvasChatMessages (): CanvasChatMessage[] {
   return messages
 }
 
+export function clearCanvasChatMessages (): void {
+  messages.length = 0
+  lastMessageId = 0
+}
+
 /**
  * Calculate opacity for a message based on time elapsed.
  * Returns 1 during visible period, fades from 1 to 0 during fade period, 0 after.

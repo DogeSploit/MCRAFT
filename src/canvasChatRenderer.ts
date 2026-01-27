@@ -4,7 +4,7 @@ import type { MessageFormatPart } from './chatUtils'
 
 
 // Config flag - set to true to render chat on canvas for recordings
-export const ChatRenderCanvas = false
+export const ChatRenderCanvas = true
 
 // Rendering constants
 const BASE_FONT_SIZE = 16

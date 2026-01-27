@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSnapshot } from 'valtio'
 import { formatMessage } from '../chatUtils'
-import { addCanvasChatMessage } from '../canvasChatMessages'
+import { addCanvasChatMessage, clearCanvasChatMessages } from '../canvasChatMessages'
 import { ChatRenderCanvas } from '../canvasChatRenderer'
 import { getBuiltinCommandsList, tryHandleBuiltinCommand } from '../builtinCommands'
 import { gameAdditionalState, hideCurrentModal, miscUiState } from '../globalState'
@@ -97,6 +97,17 @@ export default () => {
         return [...m, newMessage].slice(-messagesLimit)
       })
     })
+
+    // Clear chat on seek/restart
+    customEvents.on('clearChat', () => {
+      setMessages([])
+      lastMessageId.current = 0
+      clearCanvasChatMessages()
+    })
+
+    return () => {
+      customEvents.off('clearChat')
+    }
   }, [])
 
   return <Chat

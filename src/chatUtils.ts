@@ -114,6 +114,56 @@ export const formatMessage = (message: MessageInput, mcData: IndexedData = globa
     return flat(newMsg)
   }).flat(Infinity)
 
+  // Post-process to strip angle brackets around player names at the START of the message only
+  // For modern Minecraft (1.19+), the chat registry format includes <player> brackets
+  // This strips them while preserving the rest of the message structure
+  let foundOpenBracket = false
+  let bracketStrippingDone = false
+  msglist = msglist.map((msg, index) => {
+    if (typeof msg.text !== 'string') return msg
+    if (bracketStrippingDone) return msg // Only process at the start of the message
+
+    let text = msg.text
+
+    // Handle case where <PlayerName> is all in one segment at the start
+    if (index === 0 && text.match(/^<[^>]+>/)) {
+      text = text.replace(/^<([^>]+)>/, '$1')
+      bracketStrippingDone = true
+      return { ...msg, text }
+    }
+
+    // Handle case where brackets are split across segments
+    // Strip leading < from first segment
+    if (index === 0 && text === '<') {
+      foundOpenBracket = true
+      return { ...msg, text: '' }
+    }
+    if (index === 0 && text.startsWith('<')) {
+      foundOpenBracket = true
+      return { ...msg, text: text.slice(1) }
+    }
+
+    // Strip trailing > (with optional space) after player name - only if we found opening bracket
+    if (foundOpenBracket && (text === '>' || text === '> ' || text.startsWith('> '))) {
+      foundOpenBracket = false
+      bracketStrippingDone = true
+      return { ...msg, text: text.replace(/^>\s*/, '  ') }
+    }
+    if (foundOpenBracket && text.endsWith('>')) {
+      // End of player name like "PlayerName>"
+      foundOpenBracket = false
+      bracketStrippingDone = true
+      return { ...msg, text: text.slice(0, -1) }
+    }
+
+    // If we haven't found brackets in first few segments, stop looking
+    if (index >= 2) {
+      bracketStrippingDone = true
+    }
+
+    return msg
+  }).filter(msg => msg.text !== '')
+
   return msglist
 }
 

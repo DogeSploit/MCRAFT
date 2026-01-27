@@ -296,8 +296,71 @@ const mainPacketsReplayer = async (
   // For MCPR replays, use a unique entity ID for "us" to avoid conflicts with player entities
   const MCPR_VIEWER_ENTITY_ID = 99999
 
+  // Fields that minecraft-protocol's chat.js expects to be BigInt
+  const BIGINT_REQUIRED_FIELDS = ['timestamp', 'salt']
+
+  // Convert a [high, low] int64 array (from msgpack) to BigInt
+  const int64ArrayToBigInt = (arr: any): bigint | null => {
+    if (!Array.isArray(arr) || arr.length !== 2) return null
+    const [high, low] = arr
+    if (typeof high !== 'number' || typeof low !== 'number') return null
+    // Combine high and low 32-bit parts into a 64-bit BigInt
+    const highBigInt = BigInt(high) << 32n
+    const lowBigInt = BigInt(low >>> 0) // >>> 0 converts to unsigned 32-bit
+    return highBigInt | lowBigInt
+  }
+
+  // Process packet data:
+  // 1. Convert most BigInt to Number/String to avoid "Cannot mix BigInt" errors
+  // 2. But ensure timestamp/salt are BigInt (minecraft-protocol's chat.js expects these)
+  // 3. Handle msgpack's [high, low] array format for 64-bit integers
+  const processPacketData = (obj: any, key?: string): any => {
+    if (obj === null || obj === undefined) return obj
+
+    // For fields that minecraft-protocol expects as BigInt, ensure they are BigInt
+    if (key && BIGINT_REQUIRED_FIELDS.includes(key)) {
+      if (typeof obj === 'bigint') {
+        return obj // Already BigInt
+      }
+      if (typeof obj === 'number' || typeof obj === 'string') {
+        return BigInt(obj) // Convert to BigInt
+      }
+      // Handle msgpack's [high, low] array format for 64-bit integers
+      if (Array.isArray(obj) && obj.length === 2) {
+        const bigIntValue = int64ArrayToBigInt(obj)
+        if (bigIntValue !== null) {
+          return bigIntValue
+        }
+      }
+    }
+
+    if (typeof obj === 'bigint') {
+      return obj >= Number.MIN_SAFE_INTEGER && obj <= Number.MAX_SAFE_INTEGER
+        ? Number(obj)
+        : obj.toString()
+    }
+    if (Buffer.isBuffer(obj) || ArrayBuffer.isView(obj)) return obj
+    if (Array.isArray(obj)) return obj.map(item => processPacketData(item))
+    if (typeof obj === 'object') {
+      const result: any = {}
+      for (const objKey of Object.keys(obj)) {
+        result[objKey] = processPacketData(obj[objKey], objKey)
+      }
+      return result
+    }
+    return obj
+  }
+
   const writePacket = (name: string, data: any) => {
-    data = restoreData(data)
+    data = processPacketData(restoreData(data))
+
+    // Debug: Log chat packets
+    if (name.includes('chat')) {
+      console.log('[writePacket] Writing chat packet:', name)
+      console.log('[writePacket] timestamp:', typeof data?.timestamp, data?.timestamp)
+      console.log('[writePacket] salt:', typeof data?.salt, data?.salt)
+    }
+
     // Handle MCPR replay specific packet modifications
     if (isMcprReplay) {
       // Change login packet entity ID to avoid conflict with player entities
@@ -613,12 +676,77 @@ const mainPacketsReplayer = async (
   let totalPausedTime = 0
   let loadingScreenCleared = false
   let lastLoggedIndex = 0
+  let lastStatusUpdateTime = 0
+
+  // Helper to format milliseconds to HH:MM:SS
+  const formatTime = (ms: number): string => {
+    const totalSeconds = Math.floor(ms / 1000)
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = totalSeconds % 60
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  }
 
   // Process packets that are "due" based on elapsed time
   let replayRunning = true
 
   const processPacketsDue = () => {
     if (!replayRunning) return
+
+    // Handle restart request
+    if (packetsReplayState.restartRequested) {
+      packetsReplayState.restartRequested = false
+
+      // Clear all entities except the player's own entity
+      const entitiesToRemove = Object.values(bot.entities).filter(entity => entity !== bot.entity)
+      console.log(`Clearing ${entitiesToRemove.length} entities for restart`)
+      for (const entity of entitiesToRemove) {
+        bot.emit('entityGone', entity)
+        delete bot.entities[entity.id]
+      }
+
+      // Clear chat messages
+      customEvents.emit('clearChat')
+
+      // Reset replay state
+      currentPacketIndex = 0
+      replayStartTime = performance.now()
+      totalPausedTime = 0
+      pausedAt = 0
+      packetsReplayState.progress.current = 0
+      packetsReplayState.isPlaying = true
+      console.log('Replay restarted')
+    }
+
+    // Handle seek request
+    if (packetsReplayState.seekTargetMs !== null) {
+      const targetMs = packetsReplayState.seekTargetMs
+      packetsReplayState.seekTargetMs = null
+
+      // Find the packet index closest to the target timestamp
+      let targetIndex = 0
+      for (let i = 0; i < packetsWithTimestamp.length; i++) {
+        if (packetsWithTimestamp[i].timestamp >= targetMs) {
+          targetIndex = i
+          break
+        }
+        targetIndex = i
+      }
+
+      console.log(`Seeking to ${targetMs}ms, packet index ${targetIndex}`)
+
+      // Clear chat messages when seeking
+      customEvents.emit('clearChat')
+
+      // Update replay position
+      currentPacketIndex = targetIndex
+      // Adjust replayStartTime so elapsed time matches target
+      const speed = Math.max(0.1, packetsReplayState.speed)
+      replayStartTime = performance.now() - (targetMs / speed) - totalPausedTime
+      packetsReplayState.progress.current = targetIndex
+      packetsReplayState.isPlaying = true
+      pausedAt = 0
+    }
 
     if (!packetsReplayState.isPlaying) {
       // Track when we paused
@@ -686,7 +814,31 @@ const mainPacketsReplayer = async (
       replayRunning = false
       const finalColumnsCount = bot.world?.columns ? Object.keys(bot.world.columns).length : 0
       console.log(`Replay finished - chunks in world: ${finalColumnsCount}`)
+      // Emit final status with 100% progress
+      customEvents.emit('replayProgress', {
+        currentTime: formatTime(totalReplayTime),
+        progress: 1,
+        percentage: 100,
+        isPaused: true,
+        totalDuration: totalReplayTime
+      })
       return
+    }
+
+    // Emit replay progress every 250ms for UI updates
+    const now = performance.now()
+    if (now - lastStatusUpdateTime > 250) {
+      lastStatusUpdateTime = now
+      const currentTimestamp = packetsWithTimestamp[currentPacketIndex]?.timestamp || 0
+      const progress = currentTimestamp / totalReplayTime
+      const percentage = Math.round(progress * 100)
+      customEvents.emit('replayProgress', {
+        currentTime: formatTime(currentTimestamp),
+        progress,
+        percentage,
+        isPaused: !packetsReplayState.isPlaying,
+        totalDuration: totalReplayTime
+      })
     }
 
     // Schedule next frame - requestAnimationFrame syncs with browser's render cycle
