@@ -38,7 +38,7 @@ export default (bot: Bot) => {
       return originalGetCursorState()
     } catch {
       // Return safe default when raycast fails
-      return { cursorBlock: null, cursorEntity: null }
+      return { cursorBlock: null, entity: null, cursorBlockDiggable: null, cursorChanged: false }
     }
   }
 

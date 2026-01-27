@@ -6,7 +6,6 @@ import { setLoadingScreenStatus } from './appStatus'
 import { appQueryParams, appQueryParamsArray } from './appParams'
 import { openFile, openParsedReplay } from './packetsReplay/replayPackets'
 import { createFullScreenProgressReporter } from './core/progressReporter'
-import { loadWorldForMcprReplay } from './packetsReplay/worldLoader'
 
 export const getFixedFilesize = (bytes: number) => {
   return prettyBytes(bytes, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
