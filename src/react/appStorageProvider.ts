@@ -90,6 +90,8 @@ window.appStorage = appStorage
 
 // Restore data from localStorage
 for (const key of Object.keys(defaultStorageData)) {
+  // do not restore proxiesData from localStorage, use the default
+  if (key === 'proxiesData') continue
   const prefixedKey = `${localStoragePrefix}${key}`
   const aliasedKey = oldKeysAliases[key]
   const storedValue = localStorage.getItem(prefixedKey) ?? (aliasedKey ? localStorage.getItem(aliasedKey) : undefined)
@@ -105,6 +107,8 @@ for (const key of Object.keys(defaultStorageData)) {
 }
 
 const saveKey = (key: keyof StorageData) => {
+  // do not save proxiesData to localStorage, use the default
+  if (key === 'proxiesData') return
   const prefixedKey = `${localStoragePrefix}${key}`
   const value = appStorage[key]
   if (value === undefined) {
