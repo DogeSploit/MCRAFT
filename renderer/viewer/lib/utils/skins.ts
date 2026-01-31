@@ -65,7 +65,6 @@ const crabSkins = [
 const getRandomCrabSkin = () => crabSkins[Math.floor(Math.random() * crabSkins.length)]
 
 const defaultSkin = appQueryParams.molttown ? crab1 : stevePng
-// eslint-disable-next-line unicorn/prefer-export-from
 export const stevePngUrl = defaultSkin
 export const steveTexture = new THREE.TextureLoader().loadAsync(defaultSkin)
 
