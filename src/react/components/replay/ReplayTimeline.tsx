@@ -2,10 +2,9 @@ import { useRef, useState, useCallback, useEffect } from 'react'
 import { useSnapshot } from 'valtio'
 import { packetsReplayState } from '../../state/packetsReplayState'
 
-const SKIP_SECONDS = 10
 const HIDE_DELAY_MS = 2500
 
-function formatTime(ms: number): string {
+function formatTime (ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -17,7 +16,7 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export default function ReplayTimeline() {
+export default function ReplayTimeline () {
   const state = useSnapshot(packetsReplayState)
   const progressBarRef = useRef<HTMLDivElement>(null)
   const hideTimeoutRef = useRef<number | null>(null)
@@ -44,14 +43,6 @@ export default function ReplayTimeline() {
 
   const handlePlayPause = () => {
     packetsReplayState.isPlaying = !state.isPlaying
-  }
-
-  const handleSkip = (seconds: number) => {
-    const newTimeMs = Math.max(0, Math.min(
-      state.currentTimeMs + (seconds * 1000),
-      state.totalDurationMs
-    ))
-    packetsReplayState.seekTargetMs = newTimeMs
   }
 
   const calculateProgress = useCallback((clientX: number): number => {
@@ -127,8 +118,8 @@ export default function ReplayTimeline() {
     return null
   }
 
-  const hoverTimeMs = hoverProgress !== null ? hoverProgress * state.totalDurationMs : 0
-  const shouldShow = isVisible || isDragging
+  const hoverTimeMs = hoverProgress === null ? 0 : hoverProgress * state.totalDurationMs
+  const shouldShow = true // Always visible
 
   return (
     <div
@@ -148,7 +139,7 @@ export default function ReplayTimeline() {
         transition: 'opacity 0.2s ease, background 0.2s ease'
       }}
     >
-      {/* Progress bar */}
+      {/* Progress bar with invisible hit area */}
       <div
         ref={progressBarRef}
         onMouseDown={handleMouseDown}
@@ -157,22 +148,33 @@ export default function ReplayTimeline() {
         onMouseEnter={handleBarMouseEnter}
         style={{
           position: 'relative',
-          height: isBarHovered || isDragging ? '4px' : '3px',
-          background: 'rgba(255, 255, 255, 0.3)',
+          height: '24px',
           cursor: 'pointer',
-          transition: 'height 0.1s ease'
+          display: 'flex',
+          alignItems: 'center'
         }}
       >
+        {/* Visible bar background */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            height: isBarHovered || isDragging ? '10px' : '4px',
+            background: 'rgba(255, 255, 255, 0.3)',
+            transition: 'height 0.1s ease'
+          }}
+        />
+
         {/* Progress fill */}
         <div
           style={{
             position: 'absolute',
             left: 0,
-            top: 0,
+            height: isBarHovered || isDragging ? '10px' : '4px',
             width: `${progress * 100}%`,
-            height: '100%',
             background: '#ff0000',
-            transition: isDragging ? 'none' : 'width 0.1s ease'
+            transition: isDragging ? 'none' : 'width 0.1s ease, height 0.1s ease'
           }}
         />
 
@@ -183,8 +185,8 @@ export default function ReplayTimeline() {
             left: `${progress * 100}%`,
             top: '50%',
             transform: 'translate(-50%, -50%)',
-            width: isBarHovered || isDragging ? '10px' : '0px',
-            height: isBarHovered || isDragging ? '10px' : '0px',
+            width: isBarHovered || isDragging ? '12px' : '0px',
+            height: isBarHovered || isDragging ? '12px' : '0px',
             borderRadius: '50%',
             background: '#ff0000',
             transition: 'width 0.1s ease, height 0.1s ease',
@@ -200,12 +202,12 @@ export default function ReplayTimeline() {
               left: `${hoverProgress * 100}%`,
               bottom: '100%',
               transform: 'translateX(-50%)',
-              marginBottom: '6px',
-              padding: '2px 6px',
+              marginBottom: '10px',
+              padding: '4px 8px',
               background: 'rgba(0, 0, 0, 0.8)',
               color: '#fff',
-              fontSize: '10px',
-              borderRadius: '2px',
+              fontSize: '14px',
+              borderRadius: '3px',
               whiteSpace: 'nowrap',
               pointerEvents: 'none'
             }}
@@ -224,35 +226,6 @@ export default function ReplayTimeline() {
           color: '#fff'
         }}
       >
-        {/* Skip backward */}
-        <button
-          onClick={() => handleSkip(-SKIP_SECONDS)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative'
-          }}
-          title={`Skip back ${SKIP_SECONDS} seconds`}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-          </svg>
-          <span style={{
-            position: 'absolute',
-            fontSize: '7px',
-            fontWeight: 'bold',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>{SKIP_SECONDS}</span>
-        </button>
-
         {/* Play/Pause */}
         <button
           onClick={handlePlayPause}
@@ -274,35 +247,6 @@ export default function ReplayTimeline() {
               <path d="M8 5v14l11-7z" />
             )}
           </svg>
-        </button>
-
-        {/* Skip forward */}
-        <button
-          onClick={() => handleSkip(SKIP_SECONDS)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '4px',
-            color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative'
-          }}
-          title={`Skip forward ${SKIP_SECONDS} seconds`}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
-          </svg>
-          <span style={{
-            position: 'absolute',
-            fontSize: '7px',
-            fontWeight: 'bold',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
-          }}>{SKIP_SECONDS}</span>
         </button>
 
         {/* Time display */}

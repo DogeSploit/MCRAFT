@@ -53,6 +53,7 @@ import { UIProvider } from './react/UIProvider'
 import { useAppScale } from './scaleInterface'
 import PacketsReplayProvider from './react/PacketsReplayProvider'
 import ReplayTimeline from './react/components/replay/ReplayTimeline'
+import PointerLockHint from './react/PointerLockHint'
 import TouchInteractionHint from './react/TouchInteractionHint'
 import { ua } from './react/utils'
 import AudioControls from './react/AudioControls'
@@ -240,6 +241,7 @@ const App = () => {
             <div />
             <DebugEdges />
             <ReplayTimeline />
+            <PointerLockHint />
           </RobustPortal>
         </ButtonAppProvider>
       </div>
