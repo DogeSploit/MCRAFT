@@ -28,6 +28,7 @@ import { onCameraMove, onControInit } from './cameraRotationControls'
 import { createNotificationProgressReporter } from './core/progressReporter'
 import { appStorage } from './react/appStorageProvider'
 import { switchGameMode } from './packetsReplay/replayPackets'
+import { packetsReplayState } from './react/state/packetsReplayState'
 import { appQueryParams } from './appParams'
 
 
@@ -1349,6 +1350,140 @@ const drawRoundedRect = (
   ctx.closePath()
 }
 
+const showRecordingCountdown = async (): Promise<void> => {
+  return new Promise((resolve) => {
+    // Create overlay container
+    const overlay = document.createElement('div')
+    overlay.id = 'recording-countdown-overlay'
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.85) 100%);
+      z-index: 10000;
+      pointer-events: none;
+    `
+
+    // Create content container for proper centering
+    const contentBox = document.createElement('div')
+    contentBox.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    `
+
+    // Create label text
+    const labelEl = document.createElement('div')
+    labelEl.style.cssText = `
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 32px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      transition: opacity 0.3s ease;
+    `
+    labelEl.textContent = 'Recording starts in'
+
+    // Create countdown number element
+    const countdownEl = document.createElement('div')
+    countdownEl.style.cssText = `
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 120px;
+      font-weight: 700;
+      color: white;
+      text-shadow:
+        0 0 60px rgba(255, 100, 100, 0.9),
+        0 0 120px rgba(255, 80, 80, 0.5),
+        0 4px 8px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      line-height: 1;
+      min-width: 100px;
+    `
+
+    contentBox.appendChild(labelEl)
+    contentBox.appendChild(countdownEl)
+    overlay.appendChild(contentBox)
+    document.body.appendChild(overlay)
+
+    const counts = [3, 2, 1]
+    let index = 0
+
+    const showNext = () => {
+      if (index >= counts.length) {
+        // Show "Recording" with animated red dot
+        labelEl.style.opacity = '0'
+        labelEl.style.height = '0'
+        labelEl.style.marginBottom = '0'
+
+        countdownEl.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; gap: 16px;">
+            <span style="
+              display: inline-block;
+              width: 20px;
+              height: 20px;
+              background: #ff4444;
+              border-radius: 50%;
+              box-shadow: 0 0 20px #ff4444, 0 0 40px rgba(255, 68, 68, 0.5);
+              animation: pulse-dot 1s ease-in-out infinite;
+            "></span>
+            <span style="font-size: 42px; font-weight: 600; letter-spacing: 3px;">RECORDING</span>
+          </div>
+        `
+        countdownEl.style.textShadow = '0 0 30px rgba(255, 68, 68, 0.4)'
+        countdownEl.style.opacity = '1'
+        countdownEl.style.transform = 'scale(1)'
+
+        // Add keyframe animation for pulsing dot
+        const style = document.createElement('style')
+        style.textContent = `
+          @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.85); }
+          }
+        `
+        document.head.appendChild(style)
+
+        setTimeout(() => {
+          style.remove()
+          overlay.remove()
+          resolve()
+        }, 600)
+        return
+      }
+
+      countdownEl.textContent = String(counts[index])
+      countdownEl.style.opacity = '0'
+      countdownEl.style.transform = 'scale(0.5)'
+
+      // Trigger animation
+      requestAnimationFrame(() => {
+        countdownEl.style.opacity = '1'
+        countdownEl.style.transform = 'scale(1)'
+      })
+
+      // Fade out before next number
+      setTimeout(() => {
+        countdownEl.style.opacity = '0'
+        countdownEl.style.transform = 'scale(1.3)'
+      }, 650)
+
+      index++
+      setTimeout(showNext, 1000)
+    }
+
+    showNext()
+  })
+}
+
 const startCanvasRecording = async () => {
   console.log('[recording] startCanvasRecording called')
 
@@ -1364,6 +1499,9 @@ const startCanvasRecording = async () => {
     return
   }
   console.log('[recording] Found viewer-canvas:', gameCanvas.width, 'x', gameCanvas.height)
+
+  // Show countdown before starting
+  await showRecordingCountdown()
 
   try {
     // Create recording canvas at 1920x1080
@@ -1489,7 +1627,7 @@ const startCanvasRecording = async () => {
     console.log('[recording] Setting up MediaRecorder options')
     const recorderOptions = {
       mimeType: 'video/webm;codecs=vp9',
-      videoBitsPerSecond: 25_000_000 // 25 Mbps for high quality 1080p
+      videoBitsPerSecond: 10_000_000 // 10 Mbps for high quality 1080p60
     }
 
     // Fallback to vp8 if vp9 is not supported
@@ -1527,17 +1665,16 @@ const startCanvasRecording = async () => {
 
       const blob = new Blob(recordingState.chunks, { type: 'video/webm' })
       console.log('[recording] Blob created, size:', blob.size)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
       const date = new Date()
-      link.download = `recording ${date.toLocaleString().replaceAll('.', '-').replace(',', '')}.webm`
-      console.log('[recording] Triggering download:', link.download)
-      link.click()
-      URL.revokeObjectURL(url)
+      const filename = `recording ${date.toLocaleString().replaceAll('.', '-').replace(',', '')}.webm`
+
+      // Send recording data to parent via postMessage
+      console.log('[recording] Emitting recordingComplete event')
+      customEvents.emit('recordingComplete', { blob, filename })
+
       recordingState.mediaRecorder = null
       recordingState.chunks = []
-      console.log('[recording] Download triggered')
+      console.log('[recording] Recording complete, data sent to parent')
     }
 
     // Start recording with 1 second timeslice to ensure regular data capture
@@ -1610,6 +1747,14 @@ const stopCanvasRecording = () => {
       recordingState.indicatorElement = null
     }
 
+    // Release pointer lock so user can interact with UI
+    if (document.pointerLockElement) {
+      document.exitPointerLock?.()
+    }
+
+    // Pause playback
+    packetsReplayState.isPlaying = false
+
     console.log('[recording] Canvas recording stopped')
   } else {
     console.log('[recording] stopCanvasRecording: conditions not met, mediaRecorder:', !!recordingState.mediaRecorder, 'isRecording:', recordingState.isRecording)
@@ -1628,6 +1773,22 @@ window.addEventListener('beforeunload', () => {
     cancelAnimationFrame(recordingState.animationFrameId)
   }
   if (recordingState.isRecording) {
+    stopCanvasRecording()
+  }
+})
+
+// Stop recording when pointer lock is released
+document.addEventListener('pointerlockchange', () => {
+  if (!document.pointerLockElement && recordingState.isRecording) {
+    console.log('[recording] Pointer lock released, stopping recording')
+    stopCanvasRecording()
+  }
+})
+
+// Stop recording when Escape key is pressed (in case pointer lock doesn't catch it)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && recordingState.isRecording) {
+    console.log('[recording] Escape pressed, stopping recording')
     stopCanvasRecording()
   }
 })
