@@ -10,6 +10,7 @@ export const packetsReplayState = proxy({
   isPlaying: false,
   restartRequested: false,
   seekTargetMs: null as number | null, // Target timestamp to seek to (in ms)
+  isFastForwarding: false, // True during fast-forward (skip chat messages)
   currentTimeMs: 0, // Current playback position in ms
   totalDurationMs: 0, // Total replay duration in ms
   progress: {
