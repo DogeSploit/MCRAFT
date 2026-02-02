@@ -99,7 +99,7 @@ export function startLocalReplayServer (contentsOrPackets: string | ParsedReplay
 
   // In live mode, start at 25 seconds (will fast-forward packets)
   if (appQueryParams.live) {
-    packetsReplayState.seekTargetMs = 25000
+    packetsReplayState.seekTargetMs = 25_000
   }
 
   if (!packetsReplayState.replayName || packetsReplayState.replayName === '') {
