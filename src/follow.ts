@@ -168,8 +168,7 @@ export function getBirdsEyeCameraPosition () {
   const excludedNames = new Set(['KradleWebViewer', 'watcher'])
 
   // Helper to check if a position is at the default origin (likely uninitialized in replay mode)
-  const isAtDefaultOrigin = (pos: Vec3 | undefined) =>
-    pos && pos.x === 0 && pos.y === 0 && pos.z === 0
+  const isAtDefaultOrigin = (pos: Vec3 | undefined) => pos && pos.x === 0 && pos.y === 0 && pos.z === 0
 
   // Add the bot itself first (it's also a player) - unless it's one of the excluded
   // Skip if position is at default origin (likely not properly initialized in replay mode)
