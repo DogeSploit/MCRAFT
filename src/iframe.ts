@@ -59,6 +59,11 @@ type IFrameSendablePayload =
     blob: Blob; // Video recording blob (WebM)
     filename: string; // Suggested filename
   }
+  | {
+    source: 'minecraft-web-client';
+    action: 'chatMessages';
+    messages: Array<{ parts: Array<{ text: string; color?: string; bold?: boolean; italic?: boolean }>; id: number }>;
+  }
 
 type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins' | 'releasePointerLock' | 'birdsEyeViewFollow' | 'takeScreenshot'
 

@@ -12,6 +12,7 @@ import { getFixedFilesize } from '../react/simpleUtils'
 
 import { setLoadingScreenStatus } from '../appStatus'
 import { appQueryParams } from '../appParams'
+import { clearMolttownChat, setSkipChatMessages } from '../react/ChatProvider'
 
 export const VALID_REPLAY_EXTENSIONS = [
   PACKETS_REPLAY_FILE_EXTENSION,
@@ -691,7 +692,8 @@ const mainPacketsReplayer = async (
       }
 
       // Clear chat messages
-      customEvents.emit('clearChat' as any)
+      customEvents.emit('clearChat')
+      clearMolttownChat() // Synchronously clear molttown chat
 
       // Reset replay state
       currentPacketIndex = 0
@@ -730,14 +732,17 @@ const mainPacketsReplayer = async (
       }
 
       // Clear chat messages when seeking
-      customEvents.emit('clearChat' as any)
+      customEvents.emit('clearChat')
+      clearMolttownChat() // Synchronously clear molttown chat before fast-forward
 
       // Fast-forward: replay all packets from 0 to targetIndex immediately (no timing)
       console.log(`Fast-forwarding ${targetIndex} packets...`)
+      setSkipChatMessages(true)
       for (let i = 0; i < targetIndex; i++) {
         const packet = packetsWithTimestamp[i]
         playServerPacket(packet.name, packet.params)
       }
+      setSkipChatMessages(false)
       console.log('Fast-forward complete')
 
       // Update replay position to continue from target

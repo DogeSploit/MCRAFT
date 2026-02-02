@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSnapshot } from 'valtio'
+import { appQueryParams } from '../appParams'
 import { formatMessage } from '../chatUtils'
 import { addCanvasChatMessage, clearCanvasChatMessages } from '../canvasChatMessages'
 import { ChatRenderCanvas } from '../canvasChatRenderer'
@@ -12,6 +13,53 @@ import { useIsModalActive } from './utilsApp'
 import { hideNotification, showNotification } from './NotificationProvider'
 import { updateLoadedServerData } from './serversStorage'
 import { lastConnectOptions } from './AppStatusProvider'
+import { packetsReplayState } from './state/packetsReplayState'
+
+// Track all chat messages for molttown mode
+const allChatMessages: Array<{ parts: Array<{ text: string; color?: string; bold?: boolean; italic?: boolean }>; id: number }> = []
+
+// Track seen message content hashes to prevent duplicates
+const seenMessageHashes = new Set<string>()
+
+// Flag to skip chat during fast-forward (module-level for synchronous access)
+let skipChatMessages = false
+
+export function setSkipChatMessages (skip: boolean) {
+  skipChatMessages = skip
+}
+
+// Generate a hash from message parts for deduplication
+function getMessageHash (parts: any[]): string {
+  return parts.map(p => p.text || '').join('|')
+}
+
+// Sanitize message parts to only include serializable properties
+function sanitizeParts (parts: any[]): Array<{ text: string; color?: string; bold?: boolean; italic?: boolean }> {
+  return parts.map(part => ({
+    text: part.text || '',
+    ...(part.color && { color: part.color }),
+    ...(part.bold && { bold: part.bold }),
+    ...(part.italic && { italic: part.italic })
+  }))
+}
+
+function sendChatToParent () {
+  if (appQueryParams.molttown && window !== window.parent) {
+    window.parent.postMessage({
+      source: 'minecraft-web-client',
+      action: 'chatMessages',
+      messages: [...allChatMessages]
+    }, '*')
+  }
+}
+
+// Synchronous clear function that can be called directly before fast-forwarding
+export function clearMolttownChat () {
+  allChatMessages.length = 0
+  seenMessageHashes.clear()
+  clearCanvasChatMessages()
+  sendChatToParent()
+}
 
 // Player chat translate keys (format: "<player> message" or "* player message")
 const PLAYER_CHAT_TRANSLATE_KEYS = new Set([
@@ -78,8 +126,14 @@ export default () => {
       console.log('JTMC!! jsonMsg', jsonMsg)
       const parts = formatMessage(jsonMsg)
 
+      // Skip chat messages during fast-forward to prevent duplicates
+      if (skipChatMessages) {
+        return
+      }
+
       // Only show player chat messages on canvas (not system messages)
-      if (ChatRenderCanvas && isPlayerChatMessage(jsonMsg)) {
+      const isPlayerChat = isPlayerChatMessage(jsonMsg)
+      if (ChatRenderCanvas && isPlayerChat) {
         addCanvasChatMessage(parts)
       }
 
@@ -94,19 +148,34 @@ export default () => {
           // eslint-disable-next-line max-nested-callbacks
           setMessages(m => [...m])
         })
+
+        // Track and send chat to parent in molttown mode (only player chat messages)
+        if (isPlayerChat) {
+          const hash = getMessageHash(parts)
+          // Skip duplicate messages
+          if (!seenMessageHashes.has(hash)) {
+            seenMessageHashes.add(hash)
+            allChatMessages.push({ parts: sanitizeParts(parts), id: lastMessageId.current })
+            sendChatToParent()
+          }
+        }
+
         return [...m, newMessage].slice(-messagesLimit)
       })
     })
 
     // Clear chat on seek/restart
-    customEvents.on('clearChat' as any, () => {
+    customEvents.on('clearChat', () => {
       setMessages([])
       lastMessageId.current = 0
       clearCanvasChatMessages()
+      // Clear tracked messages and notify parent
+      allChatMessages.length = 0
+      sendChatToParent()
     })
 
     return () => {
-      customEvents.off('clearChat' as any, () => {})
+      customEvents.off('clearChat', () => {})
     }
   }, [])
 
