@@ -253,6 +253,9 @@ function renderMessageLine (
   ctx.globalAlpha = 1
 }
 
+// Max characters per line for Minecraft layout wrapping
+const MINECRAFT_MAX_CHARS_PER_LINE = 76
+
 // eslint-disable-next-line max-params
 function renderMinecraftLayout (
   ctx: CanvasRenderingContext2D,
@@ -266,9 +269,6 @@ function renderMinecraftLayout (
   const paddingBottom = Math.round(PADDING_BOTTOM * scaleFactor)
   const paddingLeft = Math.round(PADDING_LEFT * scaleFactor)
 
-  // Calculate starting Y position (bottom-up rendering)
-  const startY = canvasHeight - paddingBottom - (messagesToRender.length - 1) * lineHeight
-
   ctx.textBaseline = 'top'
 
   const iconSize = Math.round(fontSize * 1.1)
@@ -278,60 +278,93 @@ function renderMinecraftLayout (
   const badgePaddingY = Math.round(fontSize * 0.3)
   const badgeBorderRadius = 4
 
-  for (const [i, { msg, opacity }] of messagesToRender.entries()) {
-    const y = startY + i * lineHeight
-    let xOffset = paddingLeft
+  // Pre-calculate wrapped lines for each message
+  const messagesWithWrappedLines: Array<{
+    msg: CanvasChatMessage
+    opacity: number
+    wrappedLines: MessageFormatPart[][]
+    provider: string | null
+    logoImg: HTMLImageElement | null
+    usernameWidth: number
+  }> = []
 
-    // Check for provider logo
+  let totalLineCount = 0
+  for (const { msg, opacity } of messagesToRender) {
+    const wrappedLines = wrapMessagePartsByCharCount(msg.parts, MINECRAFT_MAX_CHARS_PER_LINE)
     const provider = detectProviderInMessage(msg.parts)
     const logoImg = provider ? loadLogoImage(providerLogo(provider) ?? '') : null
-
-    // Calculate badge dimensions (logo + username)
     const usernameWidth = measureUsernameWidth(ctx, msg.parts, fontSize)
+
+    messagesWithWrappedLines.push({
+      msg,
+      opacity,
+      wrappedLines,
+      provider,
+      logoImg,
+      usernameWidth
+    })
+    totalLineCount += wrappedLines.length
+  }
+
+  // Calculate starting Y position (bottom-up rendering based on total lines)
+  const startY = canvasHeight - paddingBottom - (totalLineCount - 1) * lineHeight
+
+  let currentLineIndex = 0
+  for (const { opacity, wrappedLines, logoImg, usernameWidth } of messagesWithWrappedLines) {
     const hasLogo = !!logoImg
     const logoTotalWidth = hasLogo ? iconSize + iconPadding : 0
     const badgeContentWidth = logoTotalWidth + usernameWidth
     const badgeWidth = badgeContentWidth + badgePaddingX * 2
     const badgeHeight = iconSize + badgePaddingY * 2
-    const badgeY = y - (iconSize - fontSize) / 2 - badgePaddingY
 
-    // Draw 30% opacity background rectangle for logo + username
-    if (usernameWidth > 0) {
-      ctx.save()
-      ctx.globalAlpha = opacity * 0.3
-      ctx.fillStyle = '#000000'
-      ctx.beginPath()
-      ctx.roundRect(xOffset - badgePaddingX, badgeY, badgeWidth, badgeHeight, badgeBorderRadius)
-      ctx.fill()
-      ctx.restore()
+    for (const [lineIndex, lineParts] of wrappedLines.entries()) {
+      const y = startY + currentLineIndex * lineHeight
+      let xOffset = paddingLeft
+
+      // Only draw badge and logo on the first line of a message
+      if (lineIndex === 0) {
+        const badgeY = y - (iconSize - fontSize) / 2 - badgePaddingY
+
+        // Draw 30% opacity background rectangle for logo + username
+        if (usernameWidth > 0) {
+          ctx.save()
+          ctx.globalAlpha = opacity * 0.3
+          ctx.fillStyle = '#000000'
+          ctx.beginPath()
+          ctx.roundRect(xOffset - badgePaddingX, badgeY, badgeWidth, badgeHeight, badgeBorderRadius)
+          ctx.fill()
+          ctx.restore()
+        }
+
+        // Draw logo if present
+        if (logoImg) {
+          ctx.globalAlpha = opacity
+          const logoY = y - (iconSize - fontSize) / 2
+          const logoBorderRadius = 2
+
+          ctx.save()
+
+          // Draw white rounded rectangle background for logo
+          ctx.fillStyle = '#FFFFFF'
+          ctx.beginPath()
+          ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
+          ctx.fill()
+
+          // Clip to rounded rectangle and draw logo
+          ctx.beginPath()
+          ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
+          ctx.clip()
+          ctx.drawImage(logoImg, xOffset, logoY, iconSize, iconSize)
+
+          ctx.restore()
+
+          xOffset += iconSize + iconPadding
+        }
+      }
+
+      renderMessageLine(ctx, lineParts, xOffset, y, fontSize, opacity)
+      currentLineIndex++
     }
-
-    // Draw logo if present
-    if (logoImg) {
-      ctx.globalAlpha = opacity
-      const logoY = y - (iconSize - fontSize) / 2
-      const logoBorderRadius = 2
-
-      ctx.save()
-
-      // Draw white rounded rectangle background for logo
-      ctx.fillStyle = '#FFFFFF'
-      ctx.beginPath()
-      ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
-      ctx.fill()
-
-      // Clip to rounded rectangle and draw logo
-      ctx.beginPath()
-      ctx.roundRect(xOffset, logoY, iconSize, iconSize, logoBorderRadius)
-      ctx.clip()
-      ctx.drawImage(logoImg, xOffset, logoY, iconSize, iconSize)
-
-      ctx.restore()
-
-      xOffset += iconSize + iconPadding
-    }
-
-    renderMessageLine(ctx, msg.parts, xOffset, y, fontSize, opacity)
   }
 }
 
@@ -342,6 +375,52 @@ const STACKED_CARD_BORDER_RADIUS = 8
 const STACKED_PADDING_RIGHT = 20
 const STACKED_PADDING_BOTTOM = 100
 const STACKED_CARD_WIDTH = 300 // Fixed width
+
+/**
+ * Wrap message parts by character count (for Minecraft layout).
+ * Wraps at maxChars, breaking at nearest whitespace under the limit.
+ */
+function wrapMessagePartsByCharCount (
+  parts: MessageFormatPart[],
+  maxChars: number
+): MessageFormatPart[][] {
+  const lines: MessageFormatPart[][] = []
+  let currentLine: MessageFormatPart[] = []
+  let currentLineLength = 0
+
+  for (const part of parts) {
+    if (!part.text) continue
+
+    const words = part.text.split(/(\s+)/) // Split keeping whitespace
+
+    for (const word of words) {
+      if (!word) continue
+
+      const wordLength = word.length
+
+      // If this word would exceed the line length
+      if (currentLineLength + wordLength > maxChars && currentLine.length > 0) {
+        // Start a new line
+        lines.push(currentLine)
+        currentLine = []
+        currentLineLength = 0
+      }
+
+      // Add word to current line (as a new part with same styling)
+      if (word.trim() || currentLineLength > 0) { // Don't start line with whitespace
+        currentLine.push({ ...part, text: word })
+        currentLineLength += wordLength
+      }
+    }
+  }
+
+  // Don't forget the last line
+  if (currentLine.length > 0) {
+    lines.push(currentLine)
+  }
+
+  return lines.length > 0 ? lines : [[]]
+}
 
 /**
  * Wrap message parts to fit within maxWidth.
