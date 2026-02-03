@@ -44,10 +44,33 @@ export interface CanvasChatMessage {
 let lastMessageId = 0
 const messages: CanvasChatMessage[] = []
 const MAX_MESSAGES = 100 // Keep a reasonable buffer
+const DEDUPE_TIME_WINDOW = 2000 // Don't add duplicate messages within 2 seconds
+
+/**
+ * Convert message parts to a string for comparison.
+ */
+function getMessageText (parts: MessageFormatPart[]): string {
+  return parts.map(p => p.text ?? '').join('')
+}
 
 export function addCanvasChatMessage (parts: MessageFormatPart[]): void {
-  lastMessageId++
   const now = Date.now()
+  const newMessageText = getMessageText(parts)
+
+  // Check for duplicate messages within the time window
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    // Only check recent messages within the dedupe window
+    if (now - msg.timestamp > DEDUPE_TIME_WINDOW) {
+      break
+    }
+    // If same text, skip adding this message
+    if (getMessageText(msg.parts) === newMessageText) {
+      return
+    }
+  }
+
+  lastMessageId++
   messages.push({
     parts,
     id: lastMessageId,
