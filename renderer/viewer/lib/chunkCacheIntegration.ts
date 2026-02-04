@@ -137,15 +137,33 @@ export function createChunkKey (x: number, z: number): string {
 }
 
 /**
- * Compute a hash from raw chunk data (ArrayBuffer or array)
+ * Compute a hash from raw chunk data (ArrayBuffer, TypedArray, or ArrayLike)
  * Uses FNV-1a for fast hashing
  */
-export function computeChunkDataHash (chunkData: ArrayBuffer | ArrayLike<number>): string {
-  // Convert to Uint8Array - works with both ArrayBuffer and ArrayLike<number>
-  const data = new Uint8Array(
-    // eslint-disable-next-line unicorn/prefer-spread -- ArrayLike is not Iterable
-    chunkData instanceof ArrayBuffer ? chunkData : Array.from(chunkData)
-  )
+export function computeChunkDataHash (chunkData: unknown): string {
+  // Type guard: validate input is hashable
+  let data: Uint8Array
+
+  if (chunkData instanceof ArrayBuffer) {
+    data = new Uint8Array(chunkData)
+  } else if (ArrayBuffer.isView(chunkData)) {
+    // Handle TypedArrays (Uint8Array, Int32Array, etc.)
+    data = new Uint8Array(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength)
+  } else if (Array.isArray(chunkData) || (typeof chunkData === 'object' && chunkData !== null && 'length' in chunkData)) {
+    // Handle ArrayLike<number>
+    try {
+      // eslint-disable-next-line unicorn/prefer-spread -- ArrayLike is not Iterable
+      data = new Uint8Array(Array.from(chunkData as ArrayLike<number>))
+    } catch {
+      // Fallback for invalid data - return a default hash
+      console.warn('computeChunkDataHash: Invalid chunk data, using fallback hash')
+      return '00000000'
+    }
+  } else {
+    // Unknown type - return fallback hash
+    console.warn('computeChunkDataHash: Unknown chunk data type, using fallback hash')
+    return '00000000'
+  }
 
   // Use FNV-1a hash
   let hash = 2_166_136_261 // FNV offset basis

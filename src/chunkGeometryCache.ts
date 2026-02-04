@@ -114,6 +114,14 @@ class ChunkGeometryCache {
    * Set whether the server supports the chunk-cache channel
    */
   async setServerSupportsChannel (supports: boolean, serverAddress?: string): Promise<void> {
+    // Flush pending saves for the previous server before switching
+    await this.flush()
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+      this.saveMetadataTimeout = null
+    }
+    this.metadataDirty = false
+
     this.serverSupportsChannel = supports
     this.serverAddress = serverAddress || 'unknown'
     this.memoryCache.clear()
@@ -365,14 +373,13 @@ class ChunkGeometryCache {
     // Always add to memory cache
     this.addToMemoryCache(memKey, cachedGeometry)
 
-    // Update metadata
-    this.metadata.sections[sectionKey] = {
-      blockHash,
-      lastAccessed: now
-    }
-
-    // Persist to disk if server supports channel
+    // Persist to disk only when server supports channel
     if (this.serverSupportsChannel) {
+      // Update metadata only when persistence is enabled
+      this.metadata.sections[sectionKey] = {
+        blockHash,
+        lastAccessed: now
+      }
       try {
         await mkdirRecursive(this.getServerDir())
         await fs.promises.writeFile(

@@ -100,6 +100,14 @@ class ChunkPacketCache {
    * Set server address and channel support status
    */
   async setServerInfo (serverAddress: string, supportsChannel: boolean): Promise<void> {
+    // Flush pending saves for the previous server before switching
+    await this.flush()
+    if (this.saveMetadataTimeout) {
+      clearTimeout(this.saveMetadataTimeout)
+      this.saveMetadataTimeout = null
+    }
+    this.metadataDirty = false
+
     this.serverAddress = serverAddress
     this.serverSupportsChannel = supportsChannel
     this.memoryCache.clear()
@@ -280,14 +288,13 @@ class ChunkPacketCache {
     // Always add to memory cache
     this.addToMemoryCache(memKey, cached)
 
-    // Update metadata
-    this.metadata.chunks[chunkKey] = {
-      hash: computedHash,
-      lastAccessed: now
-    }
-
-    // Persist to disk if server supports channel
+    // Persist to disk only when server supports channel
     if (this.serverSupportsChannel) {
+      // Update metadata only when persistence is enabled
+      this.metadata.chunks[chunkKey] = {
+        hash: computedHash,
+        lastAccessed: now
+      }
       try {
         await mkdirRecursive(this.getServerDir())
         await fs.promises.writeFile(
