@@ -64,6 +64,11 @@ type IFrameSendablePayload =
     action: 'chatMessages';
     messages: Array<{ parts: Array<{ text: string; color?: string; bold?: boolean; italic?: boolean }>; id: number }>;
   }
+  | {
+    source: 'minecraft-web-client';
+    action: 'unauthorized';
+    feature: 'recording' | 'camera' | 'voice';
+  }
 
 type ReceivableActions = 'followPlayer' | 'command' | 'reconnect' | 'setAgentSkins' | 'releasePointerLock' | 'birdsEyeViewFollow' | 'takeScreenshot'
 
