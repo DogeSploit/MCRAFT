@@ -1288,8 +1288,9 @@ export const toggleRecording = async () => {
   }
 }
 
-// Helper to send unauthorized message to parent
+// Helper to send unauthorized message to parent and release pointer lock
 const sendUnauthorizedMessage = (feature: 'recording' | 'camera' | 'voice') => {
+  document.exitPointerLock?.()
   if (window !== window.parent) {
     window.parent.postMessage({
       source: 'minecraft-web-client',
