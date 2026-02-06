@@ -629,6 +629,41 @@ export async function connect (connectOptions: ConnectOptions) {
 
     if (connectOptions.viewerWsConnect) {
       void handleCustomChannel()
+
+      // In viewerConnect mode, let the first position packet through (so the client
+      // knows where to load chunks), then ignore subsequent ones so the viewer
+      // has independent camera control (same as replay mode)
+      const VIEWER_IGNORE_PACKETS = new Set(['position', 'synchronize_player_position'])
+      let firstPositionReceived = false
+      const origEmit = bot._client.emit.bind(bot._client)
+
+      bot.once('end', () => {
+        if (bot?._client) {
+          bot._client.emit = origEmit
+        }
+      })
+
+      bot._client.emit = (event: string, ...args: any[]) => {
+        if (VIEWER_IGNORE_PACKETS.has(event)) {
+          if (!firstPositionReceived) {
+            firstPositionReceived = true
+            return origEmit(event, ...args)
+          }
+          return true
+        }
+        // Force spectator mode so viewer always gets free camera
+        if (event === 'login' && args[0]) {
+          args[0] = { ...args[0], gameMode: 3 }
+        }
+        if (event === 'respawn' && args[0]) {
+          args[0] = { ...args[0], gameMode: 3 }
+        }
+        // Block server-initiated gamemode changes (reason 3 = change gamemode)
+        if (event === 'game_state_change' && args[0]?.reason === 3) {
+          return true
+        }
+        return origEmit(event, ...args)
+      }
     }
     customEvents.emit('mineflayerBotCreated')
     if (singleplayer || p2pMultiplayer || localReplaySession) {
