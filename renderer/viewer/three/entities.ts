@@ -289,8 +289,6 @@ export class Entities {
     }
 
     const dt = this.clock.getDelta()
-    const botPos = this.worldRenderer.viewerPosition
-    const VISIBLE_DISTANCE = 8 * 8
 
     for (const entityId of Object.keys(this.entities)) {
       const entity = this.entities[entityId]
@@ -301,21 +299,8 @@ export class Entities {
         playerObject.animation.update(playerObject, dt)
       }
 
-      // Update visibility based on distance and chunk load status
-      if (botPos && entity.position) {
-        const dx = entity.position.x - botPos.x
-        const dy = entity.position.y - botPos.y
-        const dz = entity.position.z - botPos.z
-        const distanceSquared = dx * dx + dy * dy + dz * dz
-
-        // Get chunk coordinates
-        const chunkX = Math.floor(entity.position.x / 16) * 16
-        const chunkZ = Math.floor(entity.position.z / 16) * 16
-        const chunkKey = `${chunkX},${chunkZ}`
-
-        // Entity is visible if within 16 blocks OR in a finished chunk
-        entity.visible = !!(distanceSquared < VISIBLE_DISTANCE || this.worldRenderer.finishedChunks[chunkKey])
-      }
+      // Always make entities visible (fixes issue with entities not appearing until interacted with)
+      entity.visible = true
     }
   }
 
