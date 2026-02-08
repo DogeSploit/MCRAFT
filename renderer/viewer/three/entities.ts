@@ -763,8 +763,10 @@ export class Entities {
       console.log('[Entity Debug] Entity created successfully:', {
         id: entity.id,
         name: entity.name,
+        position: { x: entity.pos.x, y: entity.pos.y, z: entity.pos.z },
         inScene: this.worldRenderer.scene.children.includes(group),
-        visible: group.visible
+        visible: group.visible,
+        meshChildrenCount: mesh.children?.length ?? 0
       })
     } else {
       mesh = e.children.find(c => c.name === 'mesh')
@@ -795,6 +797,18 @@ export class Entities {
       if (child.name !== 'nametag') {
         child.visible = !isInvisible
       }
+    }
+
+    // Debug: Log mesh children visibility
+    if (justAdded) {
+      console.log('[Entity Debug] Mesh children visibility:', {
+        id: entity.id,
+        name: entity.name,
+        isInvisible: !!isInvisible,
+        metadata0: entity.metadata?.[0],
+        meshChildrenCount: mesh?.children?.length ?? 0,
+        meshChildrenVisible: mesh?.children?.map(c => ({ name: c.name, visible: c.visible })) ?? []
+      })
     }
     // ---
     // set baby size
