@@ -616,14 +616,13 @@ export class Entities {
 
     // Debug logging for mid-game join issues
     if (justAdded) {
-      console.log('[Entity Debug] Creating entity:', {
+      console.log('[Entity Debug] Creating entity:', JSON.stringify({
         id: entity.id,
         name: entity.name,
         type: entity.type,
-        pos: entity.pos,
+        pos: { x: entity.pos.x, y: entity.pos.y, z: entity.pos.z },
         hasUsername: !!entity.username
-      })
-    }
+      }))
 
     const isPlayerModel = entity.name === 'player'
     if (entity.name === 'zombie_villager' || entity.name === 'husk') {
@@ -760,14 +759,14 @@ export class Entities {
       // Explicitly set visibility on creation to ensure entities appear when joining mid-game
       group.visible = true
 
-      console.log('[Entity Debug] Entity created successfully:', {
+      console.log('[Entity Debug] Entity created successfully:', JSON.stringify({
         id: entity.id,
         name: entity.name,
         position: { x: entity.pos.x, y: entity.pos.y, z: entity.pos.z },
         inScene: this.worldRenderer.scene.children.includes(group),
         visible: group.visible,
         meshChildrenCount: mesh.children?.length ?? 0
-      })
+      }))
     } else {
       mesh = e.children.find(c => c.name === 'mesh')
     }
