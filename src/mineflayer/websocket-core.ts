@@ -32,7 +32,10 @@ export const getWebsocketStream = async (host: string) => {
       if (data instanceof Blob) {
         data = await data.arrayBuffer()
       }
-      clientDuplex.push(Buffer.from(data as ArrayBuffer | string))
+      const chunk = typeof data === 'string'
+        ? Buffer.from(data)
+        : Buffer.from(new Uint8Array(data))
+      clientDuplex.push(chunk)
     }).catch((err) => {
       console.error('ws message processing error', err)
     })
