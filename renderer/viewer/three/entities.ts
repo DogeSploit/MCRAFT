@@ -623,6 +623,7 @@ export class Entities {
         pos: { x: entity.pos.x, y: entity.pos.y, z: entity.pos.z },
         hasUsername: !!entity.username
       }))
+    }
 
     const isPlayerModel = entity.name === 'player'
     if (entity.name === 'zombie_villager' || entity.name === 'husk') {
