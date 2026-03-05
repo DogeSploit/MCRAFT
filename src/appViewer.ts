@@ -137,6 +137,8 @@ const connectAppWorldViewToBot = () => {
         delete appViewer.worldView?.waitingSpiralChunksLoad[`${pos.x},${pos.z}`]
       } else if (appViewer.worldView?.loadedChunks[`${pos.x},${pos.z}`]) {
         void appViewer.worldView?.loadChunk(pos, false, 'Received another chunkColumnLoad event while already loaded')
+      } else {
+        void appViewer.worldView?.loadChunk(pos, false, 'chunkColumnLoad')
       }
       appViewer.worldView?.chunkProgress()
     },
