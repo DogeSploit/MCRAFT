@@ -143,7 +143,6 @@ customEvents.on('gameLoaded', () => {
       clearTimeout(onFireTimeout)
       onFireTimeout = undefined
     }
-    appViewer.playerState.reactive.onFire = false
   })
 
   bot.on('respawn', () => {
@@ -339,9 +338,7 @@ const ENTITY_FLAGS = {
 let onFireTimeout: NodeJS.Timeout | undefined
 const updateEntityStates = (entityId: number, onFire: boolean, timeout?: boolean) => {
   if (entityId !== bot.entity.id) return
-  if (appViewer.playerState.reactive.onFire !== onFire) {
-    appViewer.playerState.reactive.onFire = onFire
-  }
+  appViewer.playerState.reactive.onFire = onFire
   if (onFireTimeout) {
     clearTimeout(onFireTimeout)
     onFireTimeout = undefined
