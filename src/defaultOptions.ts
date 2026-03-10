@@ -70,6 +70,7 @@ export const defaultOptions = {
   debugResponseTimeIndicator: false,
   chatPingExtension: true,
   chatSpellCheckEnabled: false,
+  chatTypingIndicator: false,
   // antiAliasing: false,
   topRightTimeDisplay: 'only-fullscreen' as 'only-fullscreen' | 'always' | 'never',
 
