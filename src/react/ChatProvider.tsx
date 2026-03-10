@@ -53,7 +53,7 @@ const ChatProviderBase = () => {
     debugChatScroll,
     chatPingExtension,
     chatSpellCheckEnabled,
-    chatTypingIndicator
+    chatAlwaysDisplayTypingIndicator
   } = useSnapshot(options)
   const isUsingMicrosoftAuth = useMemo(() => !!lastConnectOptions.value?.authenticatedAccount, [])
   const { forwardChat } = useSnapshot(viewerVersionState)
@@ -191,7 +191,7 @@ const ChatProviderBase = () => {
         }
       }}
     />
-    {chatTypingIndicator && !isChatActive && <TypingIndicatorOverlay />}
+    {chatAlwaysDisplayTypingIndicator && !isChatActive && <TypingIndicatorOverlay />}
   </>
 }
 

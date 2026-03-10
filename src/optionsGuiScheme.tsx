@@ -275,8 +275,8 @@ export const guiOptionsScheme: {
       },
       chatPingExtension: {
       },
-      chatTypingIndicator: {
-        text: 'Typing Indicator',
+      chatAlwaysDisplayTypingIndicator: {
+        text: 'Always Show Typing',
       },
     },
     {

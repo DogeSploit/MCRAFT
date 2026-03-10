@@ -19,7 +19,10 @@ export const useTypingIndicatorText = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now()
-      gameAdditionalState.typingUsers = gameAdditionalState.typingUsers.filter(user => !user.timestamp || now - user.timestamp < 2000)
+      const hasExpired = gameAdditionalState.typingUsers.some(user => user.timestamp && now - user.timestamp >= 2000)
+      if (hasExpired) {
+        gameAdditionalState.typingUsers = gameAdditionalState.typingUsers.filter(user => !user.timestamp || now - user.timestamp < 2000)
+      }
     }, 1000)
     return () => clearInterval(interval)
   }, [])
