@@ -638,7 +638,7 @@ export const f3Keybinds: Array<{
       //@ts-expect-error
       const loadedChunks = Object.entries(worldView.loadedChunks).filter(([, v]) => v).map(([key]) => key.split(',').map(Number))
       for (const [x, z] of loadedChunks) {
-        worldView!.unloadChunk({ x, z })
+        appViewer.worldView!.unloadChunk({ x, z })
       }
       // for (const child of viewer.scene.children) {
       //   if (child.name === 'chunk') { // should not happen

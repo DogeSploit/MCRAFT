@@ -233,7 +233,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
           colors[index] = this.setColor(block)
         }
       }
-      const chunk = { heightmap, colors }
+      const chunk: ChunkInfo = { heightmap, colors }
       this.applyShadows(chunk)
       this.chunksStore.set(key, chunk)
       this.emit(`chunkReady`, `${chunkX},${chunkZ}`)
@@ -250,7 +250,7 @@ export class DrawerAdapterImpl extends TypedEventEmitter<MapUpdates> implements 
     const chunkWorldZ = chunkZ * 16
     const chunkInfo = await this.getChunkSingleplayer(chunkX, chunkZ)
     if (chunkInfo === 'unavailable') return null
-    const heightmap = new Uint8Array(256)
+    const heightmap = new Int16Array(256)
     const colors = Array.from({ length: 256 }).fill('') as string[]
     for (let z = 0; z < 16; z += 1) {
       for (let x = 0; x < 16; x += 1) {

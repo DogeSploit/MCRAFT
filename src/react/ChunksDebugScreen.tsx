@@ -9,9 +9,10 @@ import ChunksDebug, { ChunkDebug } from './ChunksDebug'
 import { useIsModalActive } from './utilsApp'
 
 const Inner = () => {
-  const [playerX, setPlayerX] = useState(Math.floor(worldView!.lastPos.x / 16) * 16)
-  const [playerZ, setPlayerZ] = useState(Math.floor(worldView!.lastPos.z / 16) * 16)
+  const [playerX, setPlayerX] = useState(Math.floor(appViewer.worldView!.lastPos.x / 16) * 16)
+  const [playerZ, setPlayerZ] = useState(Math.floor(appViewer.worldView!.lastPos.z / 16) * 16)
   const [update, setUpdate] = useState(0)
+  const { worldView } = appViewer
 
   useUtilsEffect(({ interval }) => {
     const up = () => {
