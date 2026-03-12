@@ -98,8 +98,7 @@ jobs:
           allow-repeats: true
           message: |
             Deployed to Vercel Preview: ${{ steps.deploy.outputs.stdout }}
-            [Playground](${{ steps.deploy.outputs.stdout }}/playground/)
-            [Storybook](${{ steps.deploy.outputs.stdout }}/storybook/)
+            [DEPLOY LINK](${{ steps.deploy.outputs.stdout }}/)
       # - run: git checkout next scripts/githubActions.mjs
       - name: Set deployment alias
         if: ${{ steps.alias.outputs.alias != '' && steps.alias.outputs.alias != 'mcraft.fun' && steps.alias.outputs.alias != 's.mcraft.fun' }}
