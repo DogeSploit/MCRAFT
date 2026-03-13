@@ -49,9 +49,35 @@ if (fs.existsSync('./assets/release.json')) {
 }
 
 const configJson = JSON.parse(fs.readFileSync('./config.json', 'utf8'))
+
+// Precedence order (highest to lowest):
+// 1. CONFIG_JSON env var passed to build command
+// 2. LOCAL_CONFIG_FILE (config.mcraft-only.json or config.local.json)
+// 3. config.local.json (default local config)
+// 4. config.json (base config, already loaded)
+
+// Apply CONFIG_JSON env var if present (highest precedence)
+if (process.env.CONFIG_JSON) {
+    try {
+        const prConfig = JSON.parse(process.env.CONFIG_JSON)
+        Object.assign(configJson, prConfig)
+        console.log('Applied config from CONFIG_JSON env var (highest precedence):', Object.keys(prConfig).join(', '))
+    } catch (err) {
+        console.warn('Failed to parse CONFIG_JSON env var:', err)
+    }
+}
+
+// Apply LOCAL_CONFIG_FILE (defaults to config.local.json)
 try {
-    Object.assign(configJson, JSON.parse(fs.readFileSync(process.env.LOCAL_CONFIG_FILE || './config.local.json', 'utf8')))
-} catch (err) {}
+    const localConfigFile = process.env.LOCAL_CONFIG_FILE || './config.local.json'
+    if (fs.existsSync(localConfigFile)) {
+        const localConfig = JSON.parse(fs.readFileSync(localConfigFile, 'utf8'))
+        Object.assign(configJson, localConfig)
+    }
+} catch (err) {
+    console.warn('Failed to parse LOCAL_CONFIG_FILE:', err)
+}
+
 if (dev) {
     configJson.defaultProxy = ':8080'
 }

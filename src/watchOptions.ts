@@ -127,6 +127,24 @@ export const watchOptionsAfterViewerInit = () => {
   watchValue(options, o => {
     // appViewer.inWorldRenderingConfig.neighborChunkUpdates = o.neighborChunkUpdates
   })
+
+  // Update isRaining based on bot weather state
+  customEvents.on('mineflayerBotCreated', () => {
+    const updateRaining = () => {
+      if (bot.isRaining !== undefined) {
+        appViewer.inWorldRenderingConfig.isRaining = bot.isRaining
+      }
+    }
+
+    // Initial update
+    updateRaining()
+
+    // Listen for weather changes
+    //@ts-expect-error - weatherUpdate is not in the type definition yet
+    bot.on('weatherUpdate', () => {
+      updateRaining()
+    })
+  })
 }
 
 export const watchOptionsAfterWorldViewInit = (worldView: WorldView) => {
