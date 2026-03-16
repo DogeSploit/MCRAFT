@@ -1,9 +1,9 @@
 // not all options are watched here
 
 import { subscribeKey } from 'valtio/utils'
-import { isMobile } from 'renderer/viewer/lib/simpleUtils'
-import { WorldDataEmitter } from 'renderer/viewer/lib/worldDataEmitter'
-import { setSkinsConfig } from 'renderer/viewer/lib/utils/skins'
+import { isMobile } from 'minecraft-renderer/src/lib/simpleUtils'
+import { WorldView } from 'minecraft-renderer/src/worldView/worldView'
+import { setSkinsConfig } from 'minecraft-renderer/src/lib/utils/skins'
 import { options, watchValue } from './optionsStorage'
 import { reloadChunks } from './utils'
 import { miscUiState } from './globalState'
@@ -98,6 +98,7 @@ export const watchOptionsAfterViewerInit = () => {
     appViewer.inWorldRenderingConfig.highlightBlockColor = o.highlightBlockColor
     appViewer.inWorldRenderingConfig._experimentalSmoothChunkLoading = o.rendererSharedOptions._experimentalSmoothChunkLoading
     appViewer.inWorldRenderingConfig._renderByChunks = o.rendererSharedOptions._renderByChunks
+    appViewer.inWorldRenderingConfig.wasmMesher = o.wasmExperimentalMesher
 
     setSkinsConfig({ apiEnabled: o.loadPlayerSkins })
   })
@@ -126,9 +127,27 @@ export const watchOptionsAfterViewerInit = () => {
   watchValue(options, o => {
     // appViewer.inWorldRenderingConfig.neighborChunkUpdates = o.neighborChunkUpdates
   })
+
+  // Update isRaining based on bot weather state
+  customEvents.on('mineflayerBotCreated', () => {
+    const updateRaining = () => {
+      if (bot.isRaining !== undefined) {
+        appViewer.inWorldRenderingConfig.isRaining = bot.isRaining
+      }
+    }
+
+    // Initial update
+    updateRaining()
+
+    // Listen for weather changes
+    //@ts-expect-error - weatherUpdate is not in the type definition yet
+    bot.on('weatherUpdate', () => {
+      updateRaining()
+    })
+  })
 }
 
-export const watchOptionsAfterWorldViewInit = (worldView: WorldDataEmitter) => {
+export const watchOptionsAfterWorldViewInit = (worldView: WorldView) => {
   watchValue(options, o => {
     if (!worldView) return
     worldView.keepChunksDistance = o.keepChunksDistance

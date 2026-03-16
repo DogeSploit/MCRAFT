@@ -40,6 +40,7 @@ export const defaultOptions = {
   dayCycleAndLighting: true,
   loadPlayerSkins: true,
   renderEars: true,
+  wasmExperimentalMesher: false,
   lowMemoryMode: false,
   starfieldRendering: true,
   defaultSkybox: true,
@@ -122,7 +123,7 @@ export const defaultOptions = {
   disabledUiParts: [] as string[],
   neighborChunkUpdates: true,
   highlightBlockColor: 'auto' as 'auto' | 'blue' | 'classic',
-  activeRenderer: 'threejs',
+  activeRenderer: 'auto' as 'auto' | string | null,
   rendererSharedOptions: {
     _experimentalSmoothChunkLoading: true,
     _renderByChunks: false

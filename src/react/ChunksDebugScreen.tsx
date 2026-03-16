@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useUtilsEffect } from '@zardoy/react-util'
-import { WorldRendererCommon } from 'renderer/viewer/lib/worldrendererCommon'
-import { WorldRendererThree } from 'renderer/viewer/three/worldrendererThree'
+import { WorldRendererCommon } from 'minecraft-renderer/src/lib/worldrendererCommon'
+import { WorldRendererThree } from 'minecraft-renderer/src/three/worldRendererThree'
 import { Vec3 } from 'vec3'
 import { generateSpiralMatrix } from 'flying-squid/dist/utils'
 import Screen from './Screen'
@@ -9,9 +9,10 @@ import ChunksDebug, { ChunkDebug } from './ChunksDebug'
 import { useIsModalActive } from './utilsApp'
 
 const Inner = () => {
-  const [playerX, setPlayerX] = useState(Math.floor(worldView!.lastPos.x / 16) * 16)
-  const [playerZ, setPlayerZ] = useState(Math.floor(worldView!.lastPos.z / 16) * 16)
+  const [playerX, setPlayerX] = useState(Math.floor(appViewer.worldView!.lastPos.x / 16) * 16)
+  const [playerZ, setPlayerZ] = useState(Math.floor(appViewer.worldView!.lastPos.z / 16) * 16)
   const [update, setUpdate] = useState(0)
+  const { worldView } = appViewer
 
   useUtilsEffect(({ interval }) => {
     const up = () => {
