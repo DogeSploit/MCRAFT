@@ -750,6 +750,13 @@ export const f3Keybinds: Array<{
     },
     mobileTitle: 'Copy Server Resource Pack',
     enabled: () => !!gameAdditionalState.usingServerResourcePack
+  },
+  {
+    key: 'KeyM',
+    action () {
+      ;(window as any).world?.toggleDebugModulesPanel()
+    },
+    mobileTitle: 'Debug Modules Panel',
   }
 ]
 
