@@ -754,9 +754,9 @@ export const f3Keybinds: Array<{
   {
     key: 'KeyM',
     action () {
-      ;(window as any).world?.toggleDebugModulesPanel()
+      appViewer.backend?.backendMethods?.toggleDebugModulesPanel()
     },
-    mobileTitle: 'Debug Modules Panel',
+    mobileTitle: 'Renderer Debug Panel',
   }
 ]
 
