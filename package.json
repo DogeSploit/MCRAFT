@@ -215,7 +215,8 @@
     "patchedDependencies": {
       "pixelarticons@1.8.1": "patches/pixelarticons@1.8.1.patch",
       "mineflayer-item-map-downloader@1.2.0": "patches/mineflayer-item-map-downloader@1.2.0.patch",
-      "minecraft-protocol": "patches/minecraft-protocol.patch"
+      "minecraft-protocol": "patches/minecraft-protocol.patch",
+      "@zardoy/flying-squid@0.0.118": "patches/@zardoy__flying-squid@0.0.118.patch"
     },
     "ignoredBuiltDependencies": [
       "canvas",
